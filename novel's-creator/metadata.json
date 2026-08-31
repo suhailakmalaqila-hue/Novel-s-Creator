@@ -1,0 +1,6 @@
+{
+  "name": "Novel's Creator",
+  "description": "Visual novel-inspired story and character planner wiki studio for authors with full worldbuilding, rich editor, and character relationship tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
