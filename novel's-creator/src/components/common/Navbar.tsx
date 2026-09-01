@@ -49,7 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center gap-3.5 cursor-pointer group"
         >
           <div className="w-10 h-10 flex items-center justify-center bg-[#D4AF37] rounded-xl shadow-[0_0_15px_rgba(212,175,55,0.3)] transition-transform group-hover:scale-105">
-            <LogoEmblem size="sm" />
+            <LogoEmblem size={24} />
           </div>
           <div>
             <h1 className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-[#D4AF37] group-hover:text-white transition-colors leading-tight">
