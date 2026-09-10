@@ -8,16 +8,18 @@ import {
   removeBook,
 } from "../controllers/book.controller";
 
+import {
+  authMiddleware,
+} from "../middleware/auth.middleware";
+
 const router = Router();
 
-router.get("/:userId", getBooks);
+router.use(authMiddleware);
 
-router.get("/:userId/:bookId", getBook);
-
-router.post("/:userId", addBook);
-
-router.patch("/:userId/:bookId", editBook);
-
-router.delete("/:userId/:bookId", removeBook);
+router.get("/", getBooks);
+router.get("/:bookId", getBook);
+router.post("/", addBook);
+router.patch("/:bookId", editBook);
+router.delete("/:bookId", removeBook);
 
 export default router;

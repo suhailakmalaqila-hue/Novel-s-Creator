@@ -1,4 +1,8 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+
+import {
+  AuthenticatedRequest,
+} from "../middleware/auth.middleware";
 
 import {
   getBooksByUser,
@@ -9,13 +13,21 @@ import {
 } from "../services/book.service";
 
 export async function getBooks(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const userId = req.params.userId;
+    const userId = req.user?.userId;
 
-    const books = await getBooksByUser(userId);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
+
+    const books =
+      await getBooksByUser(userId);
 
     return res.json({
       success: true,
@@ -26,19 +38,31 @@ export async function getBooks(
 
     return res.status(500).json({
       success: false,
-      message: "Gagal mengambil daftar buku",
+      message:
+        "Gagal mengambil daftar buku",
     });
   }
 }
 
 export async function getBook(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const { userId, bookId } = req.params;
+    const userId = req.user?.userId;
+    const { bookId } = req.params;
 
-    const book = await getBookById(bookId, userId);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
+
+    const book = await getBookById(
+      bookId,
+      userId
+    );
 
     if (!book) {
       return res.status(404).json({
@@ -56,26 +80,38 @@ export async function getBook(
 
     return res.status(500).json({
       success: false,
-      message: "Gagal mengambil data buku",
+      message:
+        "Gagal mengambil data buku",
     });
   }
 }
 
 export async function addBook(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const userId = req.params.userId;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
 
     if (!req.body.title) {
       return res.status(400).json({
         success: false,
-        message: "Judul buku wajib diisi",
+        message:
+          "Judul buku wajib diisi",
       });
     }
 
-    const book = await createBook(userId, req.body);
+    const book = await createBook(
+      userId,
+      req.body
+    );
 
     return res.status(201).json({
       success: true,
@@ -87,17 +123,26 @@ export async function addBook(
 
     return res.status(500).json({
       success: false,
-      message: "Gagal membuat buku",
+      message:
+        "Gagal membuat buku",
     });
   }
 }
 
 export async function editBook(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const { userId, bookId } = req.params;
+    const userId = req.user?.userId;
+    const { bookId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
 
     const book = await updateBook(
       bookId,
@@ -114,7 +159,8 @@ export async function editBook(
 
     return res.json({
       success: true,
-      message: "Buku berhasil diperbarui",
+      message:
+        "Buku berhasil diperbarui",
       data: book,
     });
   } catch (error) {
@@ -122,17 +168,26 @@ export async function editBook(
 
     return res.status(500).json({
       success: false,
-      message: "Gagal memperbarui buku",
+      message:
+        "Gagal memperbarui buku",
     });
   }
 }
 
 export async function removeBook(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const { userId, bookId } = req.params;
+    const userId = req.user?.userId;
+    const { bookId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
 
     const deleted = await deleteBook(
       bookId,
@@ -148,14 +203,16 @@ export async function removeBook(
 
     return res.json({
       success: true,
-      message: "Buku berhasil dihapus",
+      message:
+        "Buku berhasil dihapus",
     });
   } catch (error) {
     console.error(error);
 
     return res.status(500).json({
       success: false,
-      message: "Gagal menghapus buku",
+      message:
+        "Gagal menghapus buku",
     });
   }
 }

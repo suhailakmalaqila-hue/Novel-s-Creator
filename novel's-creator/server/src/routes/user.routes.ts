@@ -5,10 +5,22 @@ import {
   updateMyProfile,
 } from "../controllers/user.controller";
 
+import {
+  authMiddleware,
+} from "../middleware/auth.middleware";
+
 const router = Router();
 
-router.get("/:userId", getMyProfile);
+router.get(
+  "/me",
+  authMiddleware,
+  getMyProfile
+);
 
-router.patch("/:userId", updateMyProfile);
+router.patch(
+  "/me",
+  authMiddleware,
+  updateMyProfile
+);
 
 export default router;

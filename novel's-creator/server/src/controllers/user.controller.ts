@@ -1,15 +1,27 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+
+import {
+  AuthenticatedRequest,
+} from "../middleware/auth.middleware";
+
 import {
   getUserById,
   updateUser,
 } from "../services/user.service";
 
 export async function getMyProfile(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const userId = req.params.userId;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
 
     const user = await getUserById(userId);
 
@@ -29,19 +41,30 @@ export async function getMyProfile(
 
     return res.status(500).json({
       success: false,
-      message: "Gagal mengambil data user",
+      message:
+        "Gagal mengambil data user",
     });
   }
 }
 
 export async function updateMyProfile(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    const userId = req.params.userId;
+    const userId = req.user?.userId;
 
-    const user = await updateUser(userId, req.body);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
+
+    const user = await updateUser(
+      userId,
+      req.body
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -52,7 +75,8 @@ export async function updateMyProfile(
 
     return res.json({
       success: true,
-      message: "Profil berhasil diperbarui",
+      message:
+        "Profil berhasil diperbarui",
       data: user,
     });
   } catch (error) {
@@ -60,7 +84,8 @@ export async function updateMyProfile(
 
     return res.status(500).json({
       success: false,
-      message: "Gagal memperbarui profil",
+      message:
+        "Gagal memperbarui profil",
     });
   }
 }
