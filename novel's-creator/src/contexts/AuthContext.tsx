@@ -98,20 +98,26 @@ export function AuthProvider({
     }
   }
 
-  async function login(
-    data: LoginData
-  ) {
-    const response =
-      await loginRequest(data);
-
+  async function login(data: LoginData) {
+    const response = await loginRequest(data);
+    
+    // Simpan token & user ke Local Storage
+    if (response.data.token) {
+      localStorage.setItem("auth_token", response.data.token);
+      localStorage.setItem("auth_user", JSON.stringify(response.data.user));
+    }
+    
     setUser(response.data.user);
   }
 
-  async function register(
-    data: RegisterData
-  ) {
-    const response =
-      await registerRequest(data);
+  async function register(data: RegisterData) {
+    const response = await registerRequest(data);
+
+    // Simpan token & user ke Local Storage
+    if (response.data.token) {
+      localStorage.setItem("auth_token", response.data.token);
+      localStorage.setItem("auth_user", JSON.stringify(response.data.user));
+    }
 
     setUser(response.data.user);
   }

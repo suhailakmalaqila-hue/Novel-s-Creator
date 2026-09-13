@@ -39,7 +39,7 @@ export function authMiddleware(
     });
   }
 
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_SECRET || "novels_creator_super_secret_key_change_this";
 
   if (!secret) {
     console.error(
