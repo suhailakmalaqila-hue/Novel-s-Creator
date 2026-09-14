@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import bookRoutes from "./routes/book.routes";
 import genreRoutes from "./routes/genre.routes";
+import chapterRoutes from "./routes/chapter.routes";
 
 dotenv.config();
 
@@ -61,6 +62,11 @@ app.use(
 app.use(
   "/api/genres",
   genreRoutes
+);
+
+app.use(
+  "/api/books",
+  chapterRoutes
 );
 
 app.listen(PORT, () => {

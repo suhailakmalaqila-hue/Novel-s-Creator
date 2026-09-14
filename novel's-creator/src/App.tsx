@@ -10,12 +10,13 @@ import {
 // Context (REST API Backend)
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BookProvider, useBooks } from './contexts/BookContext';
+import {
+  ChapterProvider,
+  useChapters,
+} from "./contexts/ChapterContext";
 
 // Local Storage Fallback untuk data pendukung
 import {
-  getChapters,
-  saveChapter,
-  deleteChapter,
   getCharacters,
   saveCharacter,
   deleteCharacter,
@@ -51,12 +52,12 @@ import { GlobalSearchModal } from './components/search/GlobalSearchModal';
 function MainAppContent() {
   const { user, isAuthenticated, logout } = useAuth();
   const { books: contextBooks, addBook, editBook, removeBook, refreshBooks } = useBooks();
+  const { chapters, refreshChapters, addChapter, editChapter, removeChapter } = useChapters();
 
   const [appStage, setAppStage] = useState<'splash' | 'auth' | 'app'>('splash');
   const [currentView, setCurrentView] = useState<AppView>('workspace');
 
   // Local state pendukung
-  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [characters, setCharacters] = useState<CharacterWiki[]>([]);
   const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
   const [customGenres, setCustomGenres] = useState<string[]>([]);
@@ -81,15 +82,29 @@ function MainAppContent() {
   }));
 
   const refreshLocalData = () => {
-    setChapters(getChapters());
     setCharacters(getCharacters());
     setQuickNotes(getQuickNotes());
     setCustomGenres(getCustomGenres());
   };
 
   useEffect(() => {
-    refreshLocalData();
-  }, []);
+    if (
+      isAuthenticated &&
+      contextBooks.length > 0
+    ) {
+      const bookId =
+        targetBookId ||
+        contextBooks[0]?.id;
+
+      if (bookId) {
+        refreshChapters(bookId);
+      }
+    }
+  }, [
+    isAuthenticated,
+    targetBookId,
+    contextBooks,
+  ]);
 
   const handleSplashFinish = () => {
     if (isAuthenticated) {
@@ -170,14 +185,56 @@ function MainAppContent() {
     }
   };
 
-  const handleSaveChapter = (chapter: Chapter) => {
-    saveChapter(chapter);
-    setChapters(getChapters());
+  const handleSaveChapter = async (
+    chapter: Chapter
+  ) => {
+    try {
+      await editChapter(
+        chapter.bookId,
+        chapter.id,
+        {
+          chapterNumber: chapter.chapterNumber,
+          title: chapter.title,
+          content: chapter.content,
+          wordCount: chapter.wordCount,
+          characterCount: chapter.characterCount,
+          status: chapter.status,
+          sortOrder: chapter.order,
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Gagal menyimpan chapter:",
+        error
+      );
+      throw error;
+    }
   };
 
-  const handleDeleteChapter = (chapterId: string) => {
-    deleteChapter(chapterId);
-    setChapters(getChapters());
+  const handleDeleteChapter = async (
+    chapterId: string
+  ) => {
+    const chapter =
+      chapters.find(
+        (item) => item.id === chapterId
+      );
+
+    if (!chapter) {
+      return;
+    }
+
+    try {
+      await removeChapter(
+        chapter.bookId,
+        chapterId
+      );
+    } catch (error) {
+      console.error(
+        "Gagal menghapus chapter:",
+        error
+      );
+      throw error;
+    }
   };
 
   const handleSaveCharacter = (char: CharacterWiki) => {
@@ -351,7 +408,7 @@ function MainAppContent() {
         isOpen={isProfileSettingsOpen}
         userProfile={user as any}
         onClose={() => setIsProfileSettingsOpen(false)}
-        onSaveProfile={() => {}}
+        onSaveProfile={() => { }}
         onDataRestored={refreshBooks}
       />
     </div>
@@ -362,7 +419,9 @@ export default function App() {
   return (
     <AuthProvider>
       <BookProvider>
-        <MainAppContent />
+        <ChapterProvider>
+          <MainAppContent />
+        </ChapterProvider>
       </BookProvider>
     </AuthProvider>
   );
