@@ -9,6 +9,10 @@ import userRoutes from "./routes/user.routes";
 import bookRoutes from "./routes/book.routes";
 import genreRoutes from "./routes/genre.routes";
 import chapterRoutes from "./routes/chapter.routes";
+import characterRoutes from "./routes/character.routes";
+import relationshipRoutes from "./routes/relationship.routes";
+import customAttributeRoutes from "./routes/custom-attribute.routes";
+import mentionRoutes from "./routes/mention.routes";
 
 dotenv.config();
 
@@ -67,6 +71,26 @@ app.use(
 app.use(
   "/api/books",
   chapterRoutes
+);
+
+app.use(
+  "/api/characters",
+  characterRoutes
+);
+
+app.use(
+  "/api/characters",
+  relationshipRoutes
+);
+
+app.use(
+  "/api/characters",
+  customAttributeRoutes
+);
+
+app.use(
+  "/api",
+  mentionRoutes
 );
 
 app.listen(PORT, () => {
