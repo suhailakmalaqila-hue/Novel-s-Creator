@@ -4,6 +4,10 @@ import { LogoEmblem } from '../common/LogoEmblem';
 import { UserAuthorProfile } from '../../types';
 import { Lock, Mail, User, PenTool, ArrowRight, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 
+// Impor Context (Perhatikan tiga pasang ../../../)
+import { useAuth } from '../../contexts/AuthContext';
+import { useBooks } from '../../contexts/BookContext';
+
 interface UnifiedAuthCardProps {
   onLoginSuccess?: (profile: UserAuthorProfile) => void;
   onAuthSuccess?: (profile: UserAuthorProfile) => void;
@@ -31,10 +35,15 @@ const registerSchema = z.object({
 });
 
 export const UnifiedAuthCard: React.FC<UnifiedAuthCardProps> = ({ onLoginSuccess, onAuthSuccess }) => {
+  // Ambil method dari context
+  const { refreshBooks } = useBooks();
+  const { login: authLogin, register: authRegister } = useAuth();
+
   const triggerAuthSuccess = (p: UserAuthorProfile) => {
     if (onAuthSuccess) onAuthSuccess(p);
     else if (onLoginSuccess) onLoginSuccess(p);
   };
+
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
   // Form states
@@ -51,46 +60,51 @@ export const UnifiedAuthCard: React.FC<UnifiedAuthCardProps> = ({ onLoginSuccess
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverMsg, setServerMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
     setServerMsg(null);
 
-    const result = loginSchema.safeParse({
-      emailOrUser: loginEmailOrUser,
-      password: loginPassword,
-    });
-
-    if (!result.success) {
-      const fieldErrors: Record<string, string> = {};
-      result.error.issues.forEach((err) => {
-        if (err.path[0]) {
-          fieldErrors[err.path[0].toString()] = err.message;
-        }
+    try {
+      await authLogin({
+        email: loginEmailOrUser,
+        password: loginPassword,
       });
-      setErrors(fieldErrors);
-      return;
+
+      // Ambil daftar buku dari backend setelah token berhasil disimpan
+      await refreshBooks();
+
+      const storedUser = localStorage.getItem('auth_user');
+      const userData = storedUser ? JSON.parse(storedUser) : null;
+
+      const profile: UserAuthorProfile = {
+        id: userData?.id || 'author_test',
+        username: userData?.username || loginEmailOrUser.split('@')[0],
+        email: userData?.email || loginEmailOrUser,
+        authorName: userData?.author_name || 'Penulis Novel',
+        penName: userData?.pen_name || 'Penulis Novel',
+        bio: userData?.bio || 'Penulis di Novel\'s Creator Studio',
+        avatarUrl: userData?.avatar_url || '',
+        dailyWordGoal: userData?.daily_word_goal || 1000,
+        todayWordCount: userData?.today_word_count || 0,
+        lastActiveDate: new Date().toISOString().split('T')[0],
+        theme: userData?.theme || 'dark',
+        soundEffects: userData?.sound_effects ?? true,
+        isAuthenticated: true,
+        createdAt: userData?.created_at || new Date().toISOString(),
+      };
+
+      triggerAuthSuccess(profile);
+    } catch (error: any) {
+      console.error("Error login:", error);
+      setServerMsg({
+        type: 'error',
+        text: error?.message || 'Email atau password salah. Silakan coba lagi.',
+      });
     }
-
-    // Auth Successful
-    const stored = localStorage.getItem('nc_user_profile');
-    let profile: UserAuthorProfile;
-
-    if (stored) {
-      try {
-        profile = JSON.parse(stored);
-        profile.isAuthenticated = true;
-      } catch {
-        profile = createDefaultProfile(result.data.emailOrUser);
-      }
-    } else {
-      profile = createDefaultProfile(result.data.emailOrUser);
-    }
-
-    triggerAuthSuccess(profile);
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
     setServerMsg(null);
@@ -114,26 +128,43 @@ export const UnifiedAuthCard: React.FC<UnifiedAuthCardProps> = ({ onLoginSuccess
       return;
     }
 
-    // Register profile
-    const newProfile: UserAuthorProfile = {
-      id: 'author_' + Date.now(),
-      username: result.data.username,
-      email: result.data.email,
-      authorName: result.data.authorName,
-      penName: result.data.authorName,
-      bio: 'Penulis kisah imajinatif & perancang dunia visual novel.',
-      avatarUrl: '',
-      dailyWordGoal: 1000,
-      todayWordCount: 0,
-      lastActiveDate: new Date().toISOString().split('T')[0],
-      theme: 'dark',
-      soundEffects: true,
-      isAuthenticated: true,
-      hasCompletedTutorial: false,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      await authRegister({
+        email: regEmail,
+        password: regPassword,
+        authorName: regAuthorName,
+      });
 
-    triggerAuthSuccess(newProfile);
+      await refreshBooks();
+
+      const storedUser = localStorage.getItem('auth_user');
+      const userData = storedUser ? JSON.parse(storedUser) : null;
+
+      const newProfile: UserAuthorProfile = {
+        id: userData?.id || 'author_' + Date.now(),
+        username: result.data.username,
+        email: result.data.email,
+        authorName: result.data.authorName,
+        penName: result.data.authorName,
+        bio: 'Penulis kisah imajinatif & perancang dunia visual novel.',
+        avatarUrl: '',
+        dailyWordGoal: 1000,
+        todayWordCount: 0,
+        lastActiveDate: new Date().toISOString().split('T')[0],
+        theme: 'dark',
+        soundEffects: true,
+        isAuthenticated: true,
+        hasCompletedTutorial: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      triggerAuthSuccess(newProfile);
+    } catch (error: any) {
+      setServerMsg({
+        type: 'error',
+        text: error?.message || 'Registrasi gagal.',
+      });
+    }
   };
 
   const handleQuickDemoAuth = () => {
@@ -175,6 +206,8 @@ export const UnifiedAuthCard: React.FC<UnifiedAuthCardProps> = ({ onLoginSuccess
       createdAt: new Date().toISOString(),
     };
   }
+
+  // ... sisa JSX render ke bawah tetap sama
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#121212] px-4 py-8 relative">

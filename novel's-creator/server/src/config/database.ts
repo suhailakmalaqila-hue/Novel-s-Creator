@@ -2,15 +2,15 @@ import path from "path";
 import dotenv from "dotenv";
 import { Pool } from "pg";
 
-// Memastikan .env di root folder selalu terbaca
+// Memastikan .env terbaca
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 const pool = new Pool({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
   port: Number(process.env.DB_PORT) || 5432,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME || "novels_creator_db",
+  user: process.env.DB_USER || "postgres",
+  password: String(process.env.DB_PASSWORD || "postgres"), // Mengunci agar nilainya PASTI string
 });
 
 pool.on("connect", () => {

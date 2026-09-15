@@ -19,6 +19,7 @@ router.use(authMiddleware);
 router.get("/", getBooks);
 router.get("/:bookId", getBook);
 router.post("/", addBook);
+router.put("/:bookId", editBook);
 router.patch("/:bookId", editBook);
 router.delete("/:bookId", removeBook);
 
