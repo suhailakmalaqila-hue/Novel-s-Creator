@@ -7,18 +7,18 @@ import {
   QuickNote,
 } from './types';
 
-// Context (REST API Backend)
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BookProvider, useBooks } from './contexts/BookContext';
-
-// Local Storage Fallback untuk data pendukung
 import {
-  getChapters,
-  saveChapter,
-  deleteChapter,
-  getCharacters,
-  saveCharacter,
-  deleteCharacter,
+  ChapterProvider,
+  useChapters,
+} from './contexts/ChapterContext';
+import {
+  CharacterProvider,
+  useCharacters,
+} from './contexts/CharacterContext';
+
+import {
   getQuickNotes,
   saveQuickNote,
   deleteQuickNote,
@@ -36,7 +36,6 @@ import {
   TUTORIAL_DUMMY_CHAPTER_1_ID,
 } from './lib/tutorialDummyData';
 
-// Components
 import { SplashScreen } from './components/splash/SplashScreen';
 import { UnifiedAuthCard } from './components/auth/UnifiedAuthCard';
 import { VisualNovelTutorial } from './components/tutorial/VisualNovelTutorial';
@@ -50,46 +49,114 @@ import { GlobalSearchModal } from './components/search/GlobalSearchModal';
 
 function MainAppContent() {
   const { user, isAuthenticated, logout } = useAuth();
-  const { books: contextBooks, addBook, editBook, removeBook, refreshBooks } = useBooks();
 
-  const [appStage, setAppStage] = useState<'splash' | 'auth' | 'app'>('splash');
-  const [currentView, setCurrentView] = useState<AppView>('workspace');
+  const {
+    books: contextBooks,
+    addBook,
+    editBook,
+    removeBook,
+    refreshBooks,
+  } = useBooks();
 
-  // Local state pendukung
-  const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [characters, setCharacters] = useState<CharacterWiki[]>([]);
-  const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
-  const [customGenres, setCustomGenres] = useState<string[]>([]);
+  const {
+    chapters,
+    refreshChapters,
+    addChapter,
+    editChapter,
+    removeChapter,
+  } = useChapters();
 
-  // Navigation targets
-  const [targetBookId, setTargetBookId] = useState<string | null>(null);
-  const [targetChapterId, setTargetChapterId] = useState<string | null>(null);
+  const {
+    characters,
+    refreshCharacters,
+    addCharacter,
+    editCharacter,
+    removeCharacter,
+  } = useCharacters();
 
-  // Modals
-  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
-  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isQuickNotesOpen, setIsQuickNotesOpen] = useState(false);
+  const [appStage, setAppStage] = useState<
+    'splash' | 'auth' | 'app'
+  >('splash');
 
-  // Normalisasi data books agar aman dan tidak undefined di WorkspaceView
-  const books: Book[] = (contextBooks || []).map((b: any) => ({
-    ...b,
-    targetWordCount: b.targetWordCount || b.target_word_count || 50000,
-    currentWordCount: b.currentWordCount || b.current_word_count || 0,
-    genres: b.genres || (b.genre ? [b.genre] : []),
-    chapters: b.chapters || [],
-  }));
+  const [currentView, setCurrentView] =
+    useState<AppView>('workspace');
+
+  const [quickNotes, setQuickNotes] =
+    useState<QuickNote[]>([]);
+
+  const [customGenres, setCustomGenres] =
+    useState<string[]>([]);
+
+  const [targetBookId, setTargetBookId] =
+    useState<string | null>(null);
+
+  const [targetChapterId, setTargetChapterId] =
+    useState<string | null>(null);
+
+  const [isTutorialOpen, setIsTutorialOpen] =
+    useState(false);
+
+  const [isProfileSettingsOpen, setIsProfileSettingsOpen] =
+    useState(false);
+
+  const [isSearchOpen, setIsSearchOpen] =
+    useState(false);
+
+  const [isQuickNotesOpen, setIsQuickNotesOpen] =
+    useState(false);
+
+  const books: Book[] = (contextBooks || []).map(
+    (b: any) => ({
+      ...b,
+      targetWordCount:
+        b.targetWordCount ||
+        b.target_word_count ||
+        50000,
+      currentWordCount:
+        b.currentWordCount ||
+        b.current_word_count ||
+        0,
+      genres:
+        b.genres ||
+        (b.genre ? [b.genre] : []),
+      chapters: b.chapters || [],
+    })
+  );
 
   const refreshLocalData = () => {
-    setChapters(getChapters());
-    setCharacters(getCharacters());
     setQuickNotes(getQuickNotes());
     setCustomGenres(getCustomGenres());
   };
 
   useEffect(() => {
-    refreshLocalData();
-  }, []);
+    if (!isAuthenticated) {
+      return;
+    }
+
+    void refreshCharacters();
+  }, [
+    isAuthenticated,
+    refreshCharacters,
+  ]);
+
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      contextBooks.length > 0
+    ) {
+      const bookId =
+        targetBookId ||
+        contextBooks[0]?.id;
+
+      if (bookId) {
+        refreshChapters(bookId);
+      }
+    }
+  }, [
+    isAuthenticated,
+    targetBookId,
+    contextBooks,
+  ]);
 
   const handleSplashFinish = () => {
     if (isAuthenticated) {
@@ -106,13 +173,29 @@ function MainAppContent() {
 
   const handleCloseTutorial = () => {
     setIsTutorialOpen(false);
+
     purgeTutorialDummyData();
-    if (targetBookId && (targetBookId.startsWith('tut-dummy') || targetBookId === TUTORIAL_DUMMY_BOOK_ID)) {
+
+    if (
+      targetBookId &&
+      (
+        targetBookId.startsWith('tut-dummy') ||
+        targetBookId === TUTORIAL_DUMMY_BOOK_ID
+      )
+    ) {
       setTargetBookId(null);
     }
-    if (targetChapterId && (targetChapterId.startsWith('tut-dummy') || targetChapterId === TUTORIAL_DUMMY_CHAPTER_1_ID)) {
+
+    if (
+      targetChapterId &&
+      (
+        targetChapterId.startsWith('tut-dummy') ||
+        targetChapterId === TUTORIAL_DUMMY_CHAPTER_1_ID
+      )
+    ) {
       setTargetChapterId(null);
     }
+
     refreshLocalData();
   };
 
@@ -125,36 +208,55 @@ function MainAppContent() {
     setAppStage('auth');
   };
 
-  // Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === 'k'
+      ) {
         e.preventDefault();
         setIsSearchOpen((prev) => !prev);
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === 'm'
+      ) {
         e.preventDefault();
         setIsQuickNotesOpen((prev) => !prev);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+    };
   }, []);
 
-  // Handler Simpan Buku Murni REST API
   const handleSaveBook = async (book: Book) => {
-    const targetWords = book.targetWordCount || (book as any).target_word_count || 50000;
+    const targetWords =
+      book.targetWordCount ||
+      (book as any).target_word_count ||
+      50000;
 
     if (book.id) {
-      // Jika ada ID (UUID dari PostgreSQL), lakukan UPDATE (PUT)
-      await editBook(book.id, {
-        title: book.title,
-        synopsis: book.synopsis,
-        targetWordCount: Number(targetWords),
-        status: book.status,
-      });
+      await editBook(
+        book.id,
+        {
+          title: book.title,
+          synopsis: book.synopsis,
+          targetWordCount: Number(targetWords),
+          status: book.status,
+        }
+      );
     } else {
-      // Jika belum ada ID, buat BUKU BARU (POST)
       await addBook({
         title: book.title,
         synopsis: book.synopsis,
@@ -164,77 +266,246 @@ function MainAppContent() {
     }
   };
 
-  const handleDeleteBook = async (bookId: string) => {
+  const handleDeleteBook = async (
+    bookId: string
+  ) => {
     if (bookId) {
       await removeBook(bookId);
     }
   };
 
-  const handleSaveChapter = (chapter: Chapter) => {
-    saveChapter(chapter);
-    setChapters(getChapters());
-  };
+  const handleSaveChapter = async (
+    chapter: Chapter
+  ) => {
+    try {
+      await editChapter(
+        chapter.bookId,
+        chapter.id,
+        {
+          chapterNumber: chapter.chapterNumber,
+          title: chapter.title,
+          content: chapter.content,
+          wordCount: chapter.wordCount,
+          characterCount: chapter.characterCount,
+          status: chapter.status,
+          sortOrder: chapter.order,
+        }
+      );
+    } catch (error) {
+      console.error(
+        'Gagal menyimpan chapter:',
+        error
+      );
 
-  const handleDeleteChapter = (chapterId: string) => {
-    deleteChapter(chapterId);
-    setChapters(getChapters());
-  };
-
-  const handleSaveCharacter = (char: CharacterWiki) => {
-    saveCharacter(char);
-    setCharacters(getCharacters());
-  };
-
-  const handleDeleteCharacter = (characterId: string) => {
-    deleteCharacter(characterId);
-    setCharacters(getCharacters());
-  };
-
-  const handleSaveQuickNote = (note: QuickNote) => {
-    saveQuickNote(note);
-    setQuickNotes(getQuickNotes());
-  };
-
-  const handleDeleteQuickNote = (noteId: string) => {
-    deleteQuickNote(noteId);
-    setQuickNotes(getQuickNotes());
-  };
-
-  const handleAddCustomGenre = (genre: string) => {
-    saveCustomGenre(genre);
-    setCustomGenres(getCustomGenres());
-  };
-
-  const handleOpenEditor = (bookId: string, chapterId?: string) => {
-    setTargetBookId(bookId);
-    if (chapterId) {
-      setTargetChapterId(chapterId);
+      throw error;
     }
+  };
+
+  const handleDeleteChapter = async (
+    chapterId: string
+  ) => {
+    const chapter =
+      chapters.find(
+        (item) => item.id === chapterId
+      );
+
+    if (!chapter) {
+      return;
+    }
+
+    try {
+      await removeChapter(
+        chapter.bookId,
+        chapterId
+      );
+    } catch (error) {
+      console.error(
+        'Gagal menghapus chapter:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+  const handleSaveCharacter = async (
+    character: CharacterWiki
+  ) => {
+    try {
+      const payload = {
+        fullName: character.fullName,
+        alias: character.alias,
+        age: character.age,
+        gender: character.gender,
+        roleTag: character.roleTag,
+        status: character.status,
+        avatarUrl: character.avatarUrl,
+        physicalAppearance:
+          character.physicalAppearance,
+        personalityTraits:
+          character.personalityTraits,
+        backstory:
+          character.backstory,
+        motivation:
+          character.motivation,
+        worldGoal:
+          character.worldGoal,
+        bookIds:
+          character.bookIds,
+      };
+
+      if (character.id) {
+        await editCharacter(
+          character.id,
+          payload
+        );
+      } else {
+        await addCharacter(
+          payload
+        );
+      }
+    } catch (error) {
+      console.error(
+        'Gagal menyimpan character:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+  const handleDeleteCharacter = async (
+    characterId: string
+  ) => {
+    try {
+      await removeCharacter(
+        characterId
+      );
+    } catch (error) {
+      console.error(
+        'Gagal menghapus character:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+  const handleSaveQuickNote = (
+    note: QuickNote
+  ) => {
+    saveQuickNote(note);
+    setQuickNotes(
+      getQuickNotes()
+    );
+  };
+
+  const handleDeleteQuickNote = (
+    noteId: string
+  ) => {
+    deleteQuickNote(noteId);
+    setQuickNotes(
+      getQuickNotes()
+    );
+  };
+
+  const handleAddCustomGenre = (
+    genre: string
+  ) => {
+    saveCustomGenre(genre);
+    setCustomGenres(
+      getCustomGenres()
+    );
+  };
+
+  const handleOpenEditor = (
+    bookId: string,
+    chapterId?: string
+  ) => {
+    setTargetBookId(bookId);
+
+    if (chapterId) {
+      setTargetChapterId(
+        chapterId
+      );
+    }
+
     setCurrentView('editor');
   };
 
-  const isDummyActive = isTutorialOpen;
-  const displayBooks = isDummyActive && books.length === 0 ? TUTORIAL_DUMMY_BOOKS : books;
-  const displayChapters = isDummyActive && chapters.length === 0 ? TUTORIAL_DUMMY_CHAPTERS : chapters;
-  const displayCharacters = isDummyActive && characters.length === 0 ? TUTORIAL_DUMMY_CHARACTERS : characters;
-  const displayQuickNotes = isDummyActive && quickNotes.length === 0 ? TUTORIAL_DUMMY_QUICK_NOTES : quickNotes;
+  const isDummyActive =
+    isTutorialOpen;
+
+  const displayBooks =
+    isDummyActive &&
+    books.length === 0
+      ? TUTORIAL_DUMMY_BOOKS
+      : books;
+
+  const displayChapters =
+    isDummyActive &&
+    chapters.length === 0
+      ? TUTORIAL_DUMMY_CHAPTERS
+      : chapters;
+
+  const displayCharacters =
+    isDummyActive &&
+    characters.length === 0
+      ? TUTORIAL_DUMMY_CHARACTERS
+      : characters;
+
+  const displayQuickNotes =
+    isDummyActive &&
+    quickNotes.length === 0
+      ? TUTORIAL_DUMMY_QUICK_NOTES
+      : quickNotes;
 
   const activeEditorBookId =
-    targetBookId || (isDummyActive && displayBooks.length > 0 ? displayBooks[0].id : null);
+    targetBookId ||
+    (
+      isDummyActive &&
+      displayBooks.length > 0
+        ? displayBooks[0].id
+        : null
+    );
+
   const activeEditorChapterId =
     targetChapterId ||
-    (isDummyActive && displayChapters.length > 0
-      ? displayChapters.find((c) => c.bookId === activeEditorBookId)?.id || displayChapters[0]?.id
-      : null);
+    (
+      isDummyActive &&
+      displayChapters.length > 0
+        ? (
+            displayChapters.find(
+              (c) =>
+                c.bookId ===
+                activeEditorBookId
+            )?.id ||
+            displayChapters[0]?.id
+          )
+        : null
+    );
 
   if (appStage === 'splash') {
-    return <SplashScreen onFinish={handleSplashFinish} />;
+    return (
+      <SplashScreen
+        onFinish={
+          handleSplashFinish
+        }
+      />
+    );
   }
 
-  if (appStage === 'auth' || !isAuthenticated) {
+  if (
+    appStage === 'auth' ||
+    !isAuthenticated
+  ) {
     return (
       <div className="min-h-screen bg-[#121212] flex items-center justify-center p-4">
-        <UnifiedAuthCard onAuthSuccess={handleAuthSuccess} />
+        <UnifiedAuthCard
+          onAuthSuccess={
+            handleAuthSuccess
+          }
+        />
       </div>
     );
   }
@@ -244,12 +515,28 @@ function MainAppContent() {
       <Navbar
         currentView={currentView}
         userProfile={user as any}
-        notesCount={displayQuickNotes.length}
-        onNavigate={(view) => setCurrentView(view)}
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onToggleNotes={() => setIsQuickNotesOpen(!isQuickNotesOpen)}
-        onOpenTutorial={() => setIsTutorialOpen(true)}
-        onOpenProfileSettings={() => setIsProfileSettingsOpen(true)}
+        notesCount={
+          displayQuickNotes.length
+        }
+        onNavigate={(view) =>
+          setCurrentView(view)
+        }
+        onOpenSearch={() =>
+          setIsSearchOpen(true)
+        }
+        onToggleNotes={() =>
+          setIsQuickNotesOpen(
+            !isQuickNotesOpen
+          )
+        }
+        onOpenTutorial={() =>
+          setIsTutorialOpen(true)
+        }
+        onOpenProfileSettings={() =>
+          setIsProfileSettingsOpen(
+            true
+          )
+        }
         onLogout={handleLogout}
       />
 
@@ -264,18 +551,30 @@ function MainAppContent() {
             onDeleteBook={handleDeleteBook}
             onSaveChapter={handleSaveChapter}
             onDeleteChapter={handleDeleteChapter}
-            onAddCustomGenre={handleAddCustomGenre}
-            onOpenEditor={handleOpenEditor}
-            onOpenCharactersWiki={() => setCurrentView('characters')}
+            onAddCustomGenre={
+              handleAddCustomGenre
+            }
+            onOpenEditor={
+              handleOpenEditor
+            }
+            onOpenCharactersWiki={() =>
+              setCurrentView('characters')
+            }
           />
         )}
 
         {currentView === 'characters' && (
           <CharacterWikiView
-            characters={displayCharacters}
+            characters={
+              displayCharacters
+            }
             books={displayBooks}
-            onSaveCharacter={handleSaveCharacter}
-            onDeleteCharacter={handleDeleteCharacter}
+            onSaveCharacter={
+              handleSaveCharacter
+            }
+            onDeleteCharacter={
+              handleDeleteCharacter
+            }
           />
         )}
 
@@ -283,10 +582,16 @@ function MainAppContent() {
           <NovelEditorView
             books={displayBooks}
             chapters={displayChapters}
-            initialBookId={activeEditorBookId}
-            initialChapterId={activeEditorChapterId}
+            initialBookId={
+              activeEditorBookId
+            }
+            initialChapterId={
+              activeEditorChapterId
+            }
             userProfile={user as any}
-            onSaveChapter={handleSaveChapter}
+            onSaveChapter={
+              handleSaveChapter
+            }
             onSelectBook={(bookId) => {
               setTargetBookId(bookId);
               setCurrentView('workspace');
@@ -297,25 +602,50 @@ function MainAppContent() {
 
       <footer className="h-10 bg-[#1E1E2E] border-t border-[#2A2A3C] flex items-center justify-between px-4 sm:px-8 text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-[#D4AF37]">Status: Sistem Aktif</span>
-          <span className="hidden sm:inline text-white/20">•</span>
+          <span className="text-[#D4AF37]">
+            Status: Sistem Aktif
+          </span>
+
+          <span className="hidden sm:inline text-white/20">
+            •
+          </span>
+
           <span className="hidden sm:inline">
-            Database: Karakter ({displayCharacters.length}) | Cerita ({displayBooks.length})
+            Database: Karakter (
+            {displayCharacters.length}
+            ) | Cerita (
+            {displayBooks.length}
+            )
           </span>
         </div>
+
         <div className="flex items-center gap-3 font-mono">
-          <span className="hidden sm:inline text-white/40">Storage: REST API & PostgreSQL</span>
-          <span className="hidden sm:inline text-white/20">•</span>
-          <span className="text-[#D4AF37]/80">V 1.0.0 Stable</span>
+          <span className="hidden sm:inline text-white/40">
+            Storage: REST API & PostgreSQL
+          </span>
+
+          <span className="hidden sm:inline text-white/20">
+            •
+          </span>
+
+          <span className="text-[#D4AF37]/80">
+            V 1.0.0 Stable
+          </span>
         </div>
       </footer>
 
       <QuickNotesDrawer
         isOpen={isQuickNotesOpen}
         notes={displayQuickNotes}
-        onClose={() => setIsQuickNotesOpen(false)}
-        onSaveNote={handleSaveQuickNote}
-        onDeleteNote={handleDeleteQuickNote}
+        onClose={() =>
+          setIsQuickNotesOpen(false)
+        }
+        onSaveNote={
+          handleSaveQuickNote
+        }
+        onDeleteNote={
+          handleDeleteQuickNote
+        }
       />
 
       <GlobalSearchModal
@@ -324,7 +654,9 @@ function MainAppContent() {
         chapters={displayChapters}
         characters={displayCharacters}
         notes={displayQuickNotes}
-        onClose={() => setIsSearchOpen(false)}
+        onClose={() =>
+          setIsSearchOpen(false)
+        }
         onSelectBook={(bId) => {
           setTargetBookId(bId);
           setCurrentView('workspace');
@@ -342,15 +674,25 @@ function MainAppContent() {
       <VisualNovelTutorial
         isOpen={isTutorialOpen}
         currentView={currentView}
-        onNavigate={(view) => setCurrentView(view)}
+        onNavigate={(view) =>
+          setCurrentView(view)
+        }
         onClose={handleCloseTutorial}
-        onComplete={handleTutorialComplete}
+        onComplete={
+          handleTutorialComplete
+        }
       />
 
       <ProfileSettingsModal
-        isOpen={isProfileSettingsOpen}
+        isOpen={
+          isProfileSettingsOpen
+        }
         userProfile={user as any}
-        onClose={() => setIsProfileSettingsOpen(false)}
+        onClose={() =>
+          setIsProfileSettingsOpen(
+            false
+          )
+        }
         onSaveProfile={() => {}}
         onDataRestored={refreshBooks}
       />
@@ -362,7 +704,11 @@ export default function App() {
   return (
     <AuthProvider>
       <BookProvider>
-        <MainAppContent />
+        <ChapterProvider>
+          <CharacterProvider>
+            <MainAppContent />
+          </CharacterProvider>
+        </ChapterProvider>
       </BookProvider>
     </AuthProvider>
   );

@@ -1,38 +1,23 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Book, Chapter, ChapterSnapshot, SaveStatus, UserAuthorProfile } from '../../types';
-import {
-  countWords,
-  countCharacters,
-  saveSnapshot,
-  getSnapshots,
-} from '../../lib/storage';
+import { countWords, countCharacters } from '../../lib/storage';
+import { useChapters } from '../../contexts/ChapterContext';
 import {
   Save,
-  Undo,
-  Redo,
   Bold,
   Italic,
   Underline,
   Strikethrough,
   Heading1,
   Heading2,
-  Heading3,
   Quote,
-  List,
-  ListOrdered,
-  Minus,
   Maximize2,
   Minimize2,
   History,
   Download,
   BookOpen,
   FileText,
-  Sparkles,
-  ChevronDown,
   Clock,
-  Target,
-  CheckCircle2,
-  AlertCircle,
   RotateCcw,
   X,
 } from 'lucide-react';
@@ -43,7 +28,7 @@ interface NovelEditorViewProps {
   initialBookId?: string | null;
   initialChapterId?: string | null;
   userProfile: UserAuthorProfile | null;
-  onSaveChapter: (chapter: Chapter) => void;
+  onSaveChapter: (chapter: Chapter) => void | Promise<void>;
   onSelectBook: (bookId: string) => void;
 }
 
@@ -56,44 +41,134 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
   onSaveChapter,
   onSelectBook,
 }) => {
-  // Current Book & Chapter Selection
+  const { snapshots, refreshSnapshots, addSnapshot } = useChapters();
+
+  // Selected Book & Chapter State
   const [selectedBookId, setSelectedBookId] = useState<string>(
-    initialBookId || (books.length > 0 ? books[0].id : '')
+    () => initialBookId || (books.length > 0 ? books[0].id : '')
   );
 
-  const availableChapters = chapters.filter((c) => c.bookId === selectedBookId);
+  const availableChapters = useMemo(
+    () => chapters.filter((c) => c.bookId === selectedBookId),
+    [chapters, selectedBookId]
+  );
 
   const [selectedChapterId, setSelectedChapterId] = useState<string>(
-    initialChapterId ||
-      (availableChapters.length > 0 ? availableChapters[0].id : '')
+    () => initialChapterId || (availableChapters.length > 0 ? availableChapters[0].id : '')
   );
 
-  const activeChapter =
-    chapters.find((c) => c.id === selectedChapterId) || null;
+  const activeChapter = useMemo(
+    () => chapters.find((c) => c.id === selectedChapterId) || null,
+    [chapters, selectedChapterId]
+  );
 
-  // Editor content states
   const [content, setContent] = useState(activeChapter?.content || '');
   const [chapterTitle, setChapterTitle] = useState(activeChapter?.title || '');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [lastSavedTime, setLastSavedTime] = useState<string>('Tersimpan');
 
-  // Distraction-free Focus Mode
   const [isFocusMode, setIsFocusMode] = useState(false);
-
-  // Typography styles
   const [fontFamily, setFontFamily] = useState<'serif' | 'sans' | 'mono'>('serif');
   const [fontSize, setFontSize] = useState<number>(18);
-  const [lineSpacing, setLineSpacing] = useState<number>(1.8);
-
-  // History & Emergency Snapshots Drawer
+  const [lineSpacing] = useState<number>(1.8);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
-  const [snapshots, setSnapshots] = useState<ChapterSnapshot[]>([]);
 
-  // Textarea Ref & Auto-save timeout
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
-  // Update content when active chapter changes
+  // Refs untuk mencegah Stale Closure saat Auto-Save & Unmount Flush
+  const contentRef = useRef(content);
+  const chapterTitleRef = useRef(chapterTitle);
+  const activeChapterRef = useRef(activeChapter);
+  const saveStatusRef = useRef(saveStatus);
+
+  useEffect(() => {
+    contentRef.current = content;
+    chapterTitleRef.current = chapterTitle;
+    activeChapterRef.current = activeChapter;
+    saveStatusRef.current = saveStatus;
+  }, [content, chapterTitle, activeChapter, saveStatus]);
+
+  // Eksekusi Simpan (Dioptimalkan dengan Ref)
+  const performSave = useCallback(
+    async (manual = false, reason = 'Auto-save draft') => {
+      const targetChapter = activeChapterRef.current;
+      if (!targetChapter) return;
+
+      setSaveStatus('saving');
+      const latestContent = contentRef.current;
+      const latestTitle = chapterTitleRef.current;
+
+      try {
+        const words = countWords(latestContent);
+        const chars = countCharacters(latestContent);
+
+        const updatedChapter: Chapter = {
+          ...targetChapter,
+          title: latestTitle.trim() || targetChapter.title,
+          content: latestContent,
+          wordCount: words,
+          characterCount: chars,
+          lastSavedAt: Date.now(),
+        };
+
+        await onSaveChapter(updatedChapter);
+
+        if (manual || Math.abs(words - (targetChapter.wordCount || 0)) > 20) {
+          await addSnapshot(targetChapter.bookId, targetChapter.id, {
+            chapterTitle: updatedChapter.title,
+            content: latestContent,
+            wordCount: words,
+            reason,
+          });
+        }
+
+        setSaveStatus('saved');
+        setLastSavedTime(
+          new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          })
+        );
+      } catch (error) {
+        console.error('Save failed:', error);
+        setSaveStatus('error');
+      }
+    },
+    [onSaveChapter, addSnapshot]
+  );
+
+  // Fungsi Flush: Langsung simpan jika ada perubahan tertunda
+  const flushPendingSave = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (saveStatusRef.current === 'unsaved') {
+      void performSave(false, 'Flush otomatis sebelum ganti/keluar');
+    }
+  }, [performSave]);
+
+  // Ganti Bab / Buku dengan Aman (Flush Data Lama Terlebih Dahulu)
+  const handleChapterChange = (newChapterId: string) => {
+    flushPendingSave();
+    setSelectedChapterId(newChapterId);
+  };
+
+  const handleBookChange = (newBookId: string) => {
+    flushPendingSave();
+    setSelectedBookId(newBookId);
+    const nextChaps = chapters.filter((c) => c.bookId === newBookId);
+    if (nextChaps.length > 0) {
+      setSelectedChapterId(nextChaps[0].id);
+    } else {
+      setSelectedChapterId('');
+    }
+  };
+
+  // Sync state lokal saat activeChapter berganti
   useEffect(() => {
     if (activeChapter) {
       setContent(activeChapter.content || '');
@@ -107,84 +182,43 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             })
           : 'Tersimpan'
       );
-      // Load emergency snapshots
-      setSnapshots(getSnapshots(activeChapter.id));
+      refreshSnapshots(activeChapter.bookId, activeChapter.id);
     } else {
       setContent('');
       setChapterTitle('');
     }
-  }, [activeChapter?.id]);
+  }, [activeChapter?.id, activeChapter?.bookId, refreshSnapshots]);
 
-  // Keep selectedBookId in sync
+  // Handle Unmount / Close Window (Flush on Exit)
   useEffect(() => {
-    if (initialBookId && initialBookId !== selectedBookId) {
-      setSelectedBookId(initialBookId);
+    const handleBeforeUnload = () => {
+      flushPendingSave();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushPendingSave();
+    };
+  }, [flushPendingSave]);
+
+  // Preservasi Kursor Presisi
+  useLayoutEffect(() => {
+    if (pendingSelectionRef.current && textareaRef.current) {
+      const { start, end } = pendingSelectionRef.current;
+      textareaRef.current.setSelectionRange(start, end);
+      pendingSelectionRef.current = null;
     }
-  }, [initialBookId]);
+  }, [content]);
 
-  // Keep selectedChapterId in sync
-  useEffect(() => {
-    if (initialChapterId && initialChapterId !== selectedChapterId) {
-      setSelectedChapterId(initialChapterId);
-    }
-  }, [initialChapterId]);
-
-  // Word and character counts
-  const currentWordCount = countWords(content);
-  const currentCharacterCount = countCharacters(content);
-  const readingTimeMinutes = Math.max(1, Math.ceil(currentWordCount / 200));
-
-  // Perform Save action
-  const performSave = useCallback(
-    (manual = false, reason = 'Auto-save draft') => {
-      if (!activeChapter) return;
-
-      setSaveStatus('saving');
-
-      try {
-        const words = countWords(content);
-        const chars = countCharacters(content);
-
-        const updatedChapter: Chapter = {
-          ...activeChapter,
-          title: chapterTitle.trim() || activeChapter.title,
-          content,
-          wordCount: words,
-          characterCount: chars,
-          lastSavedAt: Date.now(),
-        };
-
-        onSaveChapter(updatedChapter);
-
-        // Also record an Emergency Draft Snapshot if manual or every significant change
-        if (manual || Math.abs(words - (activeChapter.wordCount || 0)) > 20) {
-          const snapshot: ChapterSnapshot = {
-            id: 'snap_' + Date.now(),
-            chapterId: activeChapter.id,
-            bookId: activeChapter.bookId,
-            chapterTitle: updatedChapter.title,
-            content,
-            wordCount: words,
-            timestamp: Date.now(),
-            reason,
-          };
-          saveSnapshot(snapshot);
-          setSnapshots(getSnapshots(activeChapter.id));
-        }
-
-        setSaveStatus('saved');
-        setLastSavedTime(
-          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-        );
-      } catch (err) {
-        console.error('Save failed:', err);
-        setSaveStatus('error');
-      }
-    },
-    [activeChapter, chapterTitle, content, onSaveChapter]
+  // Perhitungan Statistik
+  const currentWordCount = useMemo(() => countWords(content), [content]);
+  const currentCharacterCount = useMemo(() => countCharacters(content), [content]);
+  const readingTimeMinutes = useMemo(
+    () => Math.max(1, Math.ceil(currentWordCount / 200)),
+    [currentWordCount]
   );
 
-  // Auto-save debouncing
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setContent(val);
@@ -195,16 +229,15 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     }
 
     autoSaveTimerRef.current = setTimeout(() => {
-      performSave(false, 'Penyimpanan berkala otomatis');
+      void performSave(false, 'Penyimpanan berkala otomatis');
     }, 1800);
   };
 
-  // Keyboard shortcut Ctrl+S / Cmd+S
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        performSave(true, 'Disimpan manual (Ctrl+S)');
+        void performSave(true, 'Disimpan manual (Ctrl+S)');
       }
       if (e.key === 'Escape' && isFocusMode) {
         setIsFocusMode(false);
@@ -214,7 +247,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [performSave, isFocusMode]);
 
-  // Insert formatting helper
   const insertFormatting = (prefix: string, suffix = '', placeholder = '') => {
     if (!textareaRef.current) return;
     const el = textareaRef.current;
@@ -223,38 +255,40 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     const selected = content.substring(start, end) || placeholder;
 
     const replacement = prefix + selected + suffix;
-    const newContent =
-      content.substring(0, start) + replacement + content.substring(end);
+    const newContent = content.substring(0, start) + replacement + content.substring(end);
+
+    pendingSelectionRef.current = {
+      start: start + prefix.length,
+      end: start + prefix.length + selected.length,
+    };
 
     setContent(newContent);
     setSaveStatus('unsaved');
-
-    setTimeout(() => {
-      el.focus();
-      el.setSelectionRange(
-        start + prefix.length,
-        start + prefix.length + selected.length
-      );
-    }, 10);
+    el.focus();
   };
 
-  // Restore snapshot
   const handleRestoreSnapshot = (snap: ChapterSnapshot) => {
     if (
-      window.confirm(
+      !window.confirm(
         `Pulihkan versi naskah dari ${new Date(
           snap.timestamp
         ).toLocaleString()} (${snap.wordCount} kata)? Draft saat ini akan digantikan.`
       )
     ) {
-      setContent(snap.content);
-      setChapterTitle(snap.chapterTitle);
-      performSave(true, `Dipulihkan dari snapshot (${new Date(snap.timestamp).toLocaleTimeString()})`);
-      setIsHistoryDrawerOpen(false);
+      return;
     }
+
+    setContent(snap.content);
+    setChapterTitle(snap.chapterTitle);
+
+    void performSave(
+      true,
+      `Dipulihkan dari snapshot (${new Date(snap.timestamp).toLocaleTimeString()})`
+    );
+
+    setIsHistoryDrawerOpen(false);
   };
 
-  // Export functions
   const handleExportText = (format: 'txt' | 'md') => {
     if (!activeChapter) return;
     const ext = format === 'md' ? 'md' : 'txt';
@@ -268,7 +302,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // IF NO BOOKS EXIST AT ALL (STRICT ZERO HARDCODED DUMMY DATA EMPTY STATE)
   if (books.length === 0) {
     return (
       <div
@@ -295,7 +328,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     );
   }
 
-  // IF BOOK HAS NO CHAPTERS
   if (!activeChapter) {
     return (
       <div className="space-y-6">
@@ -304,11 +336,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             <label className="text-xs text-[#8E8EA4]">Pilih Buku:</label>
             <select
               value={selectedBookId}
-              onChange={(e) => {
-                setSelectedBookId(e.target.value);
-                const firstChap = chapters.find((c) => c.bookId === e.target.value);
-                if (firstChap) setSelectedChapterId(firstChap.id);
-              }}
+              onChange={(e) => handleBookChange(e.target.value)}
               className="px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs text-[#FAF7EE] outline-none"
             >
               {books.map((b) => (
@@ -348,22 +376,13 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           : 'space-y-4'
       }`}
     >
-      {/* Top Studio Control Bar */}
       <div className="bg-[#1E1E2E] border border-[#2A2A3C] rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Left: Book & Chapter Switchers */}
         <div className="flex flex-wrap items-center gap-3" data-tour="editor-selector-bar">
-          {/* Book Switcher */}
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-[#D4AF37] shrink-0" />
             <select
               value={selectedBookId}
-              onChange={(e) => {
-                setSelectedBookId(e.target.value);
-                const nextChaps = chapters.filter((c) => c.bookId === e.target.value);
-                if (nextChaps.length > 0) {
-                  setSelectedChapterId(nextChaps[0].id);
-                }
-              }}
+              onChange={(e) => handleBookChange(e.target.value)}
               className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
             >
               {books.map((b) => (
@@ -374,13 +393,12 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             </select>
           </div>
 
-          {/* Chapter Switcher */}
           {availableChapters.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#6E6E85]">/</span>
               <select
                 value={selectedChapterId}
-                onChange={(e) => setSelectedChapterId(e.target.value)}
+                onChange={(e) => handleChapterChange(e.target.value)}
                 className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
               >
                 {availableChapters.map((chap) => (
@@ -393,9 +411,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           )}
         </div>
 
-        {/* Right: Save Status, Word Count & Emergency Draft Actions */}
         <div className="flex flex-wrap items-center gap-3" data-tour="editor-toolbar-actions">
-          {/* Save Status Indicator & Manual Save */}
           <div className="flex items-center gap-2" data-tour="editor-save-indicator">
             <div
               id="editor-save-status-pill"
@@ -449,10 +465,9 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
               </span>
             </div>
 
-            {/* Quick Manual Save Button */}
             <button
               id="btn-manual-save"
-              onClick={() => performSave(true, 'Simpan manual')}
+              onClick={() => void performSave(true, 'Simpan manual')}
               className="py-1.5 px-3 bg-[#242438] hover:bg-[#30304C] text-[#D4AF37] border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
               title="Simpan Naskah (Ctrl+S)"
             >
@@ -461,7 +476,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             </button>
           </div>
 
-          {/* Emergency Draft History Vault Drawer Button */}
           <button
             id="btn-emergency-draft-history"
             data-tour="editor-history-vault"
@@ -477,7 +491,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             <span>Draft Darurat ({snapshots.length})</span>
           </button>
 
-          {/* Fullscreen / Focus Mode toggle */}
           <button
             id="btn-toggle-focus-mode"
             data-tour="editor-focus-btn"
@@ -490,7 +503,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         </div>
       </div>
 
-      {/* Real-time Word & Reading Stats Ribbon */}
       <div
         data-tour="editor-stats-ribbon"
         className="bg-[#181826] border border-[#2A2A3C] px-5 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs"
@@ -514,7 +526,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           </div>
         </div>
 
-        {/* Daily Goal Mini-Progress */}
         <div className="flex items-center gap-3">
           <div className="text-[#8E8EA4]">
             Target Harian:{' '}
@@ -536,12 +547,10 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         </div>
       </div>
 
-      {/* Rich Text Editor Toolbar */}
       <div
         data-tour="editor-export-tools"
         className="bg-[#1E1E2E] border border-[#2A2A3C] p-2.5 rounded-2xl flex flex-wrap items-center justify-between gap-2"
       >
-        {/* Formatting Group */}
         <div className="flex flex-wrap items-center gap-1" data-tour="editor-formatting-tools">
           <button
             type="button"
@@ -605,7 +614,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
           <span className="w-px h-5 bg-[#2A2A3C] mx-1" />
 
-          {/* Dialogue dash & Scene Break Divider */}
           <button
             type="button"
             onClick={() => insertFormatting('— ', '', 'Dialog tokoh...')}
@@ -624,9 +632,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           </button>
         </div>
 
-        {/* Font & Export Settings */}
         <div className="flex items-center gap-2" data-tour="editor-typography-group">
-          {/* Font Family Selector */}
           <select
             value={fontFamily}
             onChange={(e) => setFontFamily(e.target.value as 'serif' | 'sans' | 'mono')}
@@ -637,7 +643,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             <option value="mono">Monospace</option>
           </select>
 
-          {/* Font Size Selector */}
           <select
             value={fontSize}
             onChange={(e) => setFontSize(Number(e.target.value))}
@@ -650,7 +655,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             <option value={22}>22px</option>
           </select>
 
-          {/* Download Dropdown */}
           <div className="flex items-center gap-1" data-tour="editor-export-btn">
             <button
               onClick={() => handleExportText('txt')}
@@ -663,12 +667,10 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         </div>
       </div>
 
-      {/* Main Studio Writing Stage */}
       <div
         data-tour="editor-canvas-stage"
         className="relative flex flex-col bg-[#1A1A28] border border-[#2A2A3C] rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-2xl min-h-[550px]"
       >
-        {/* Chapter Title Field */}
         <input
           id="editor-chapter-title-input"
           type="text"
@@ -681,7 +683,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           className="font-editorial text-2xl sm:text-3xl font-bold text-[#FAF7EE] bg-transparent border-b border-[#2A2A3C] pb-3 mb-6 outline-none placeholder-[#55556C] focus:border-[#D4AF37] transition-colors"
         />
 
-        {/* Textarea Writing Surface */}
         <textarea
           id="editor-manuscript-textarea"
           ref={textareaRef}
@@ -703,7 +704,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         />
       </div>
 
-      {/* EMERGENCY DRAFT SNAPSHOTS DRAWER / MODAL */}
       {isHistoryDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs">
           <div className="w-full max-w-md bg-[#1E1E2E] border-l border-[#2A2A3C] h-full p-6 flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200">

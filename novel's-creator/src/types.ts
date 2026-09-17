@@ -63,6 +63,18 @@ export interface CharacterWiki {
   updatedAt: number;
 }
 
+export interface CharacterMention {
+  id: string;
+  chapterId: string;
+  characterId: string;
+  displayText: string;
+  startOffset?: number;
+  endOffset?: number;
+  characterName?: string;
+  characterAlias?: string;
+  createdAt: number;
+}
+
 export interface Chapter {
   id: string;
   bookId: string;
