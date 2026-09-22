@@ -1,7 +1,7 @@
 import { Response } from "express";
 
 import {
-  AuthenticatedRequest,
+  AuthRequest,
 } from "../middleware/auth.middleware";
 
 import {
@@ -13,11 +13,11 @@ import {
 } from "../services/book.service";
 
 export async function getBooks(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -45,11 +45,11 @@ export async function getBooks(
 }
 
 export async function getBook(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
     const { bookId } = req.params;
 
     if (!userId) {
@@ -87,11 +87,11 @@ export async function getBook(
 }
 
 export async function addBook(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -130,11 +130,11 @@ export async function addBook(
 }
 
 export async function editBook(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
     const { bookId } = req.params;
 
     if (!userId) {
@@ -175,11 +175,11 @@ export async function editBook(
 }
 
 export async function removeBook(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
     const { bookId } = req.params;
 
     if (!userId) {

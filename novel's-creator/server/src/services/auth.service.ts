@@ -14,7 +14,12 @@ function generateToken(user: {
   email: string;
   role: string;
 }) {
-  const secret = process.env.JWT_SECRET || "novels_creator_super_secret_key_change_this";
+  const secret = process.env.JWT_SECRET;
+
+  console.log(
+    "JWT_SECRET loaded:",
+    Boolean(process.env.JWT_SECRET)
+  );
 
   if (!secret) {
     throw new Error("JWT_SECRET belum dikonfigurasi");

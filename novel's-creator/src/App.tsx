@@ -1,22 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
   AppView,
   Book,
   Chapter,
   CharacterWiki,
   QuickNote,
-} from './types';
+} from "./types";
 
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { BookProvider, useBooks } from './contexts/BookContext';
+import {
+  AuthProvider,
+  useAuth,
+} from "./contexts/AuthContext";
+
+import {
+  BookProvider,
+  useBooks,
+} from "./contexts/BookContext";
+
 import {
   ChapterProvider,
   useChapters,
-} from './contexts/ChapterContext';
+} from "./contexts/ChapterContext";
+
 import {
   CharacterProvider,
   useCharacters,
-} from './contexts/CharacterContext';
+} from "./contexts/CharacterContext";
 
 import {
   getQuickNotes,
@@ -25,7 +40,7 @@ import {
   getCustomGenres,
   saveCustomGenre,
   purgeTutorialDummyData,
-} from './lib/storage';
+} from "./lib/storage";
 
 import {
   TUTORIAL_DUMMY_BOOKS,
@@ -34,21 +49,54 @@ import {
   TUTORIAL_DUMMY_QUICK_NOTES,
   TUTORIAL_DUMMY_BOOK_ID,
   TUTORIAL_DUMMY_CHAPTER_1_ID,
-} from './lib/tutorialDummyData';
+} from "./lib/tutorialDummyData";
 
-import { SplashScreen } from './components/splash/SplashScreen';
-import { UnifiedAuthCard } from './components/auth/UnifiedAuthCard';
-import { VisualNovelTutorial } from './components/tutorial/VisualNovelTutorial';
-import { ProfileSettingsModal } from './components/profile/ProfileSettingsModal';
-import { Navbar } from './components/common/Navbar';
-import { WorkspaceView } from './components/workspace/WorkspaceView';
-import { CharacterWikiView } from './components/character/CharacterWikiView';
-import { NovelEditorView } from './components/editor/NovelEditorView';
-import { QuickNotesDrawer } from './components/notes/QuickNotesDrawer';
-import { GlobalSearchModal } from './components/search/GlobalSearchModal';
+import {
+  SplashScreen,
+} from "./components/splash/SplashScreen";
+
+import {
+  UnifiedAuthCard,
+} from "./components/auth/UnifiedAuthCard";
+
+import {
+  VisualNovelTutorial,
+} from "./components/tutorial/VisualNovelTutorial";
+
+import {
+  ProfileSettingsModal,
+} from "./components/profile/ProfileSettingsModal";
+
+import {
+  Navbar,
+} from "./components/common/Navbar";
+
+import {
+  WorkspaceView,
+} from "./components/workspace/WorkspaceView";
+
+import {
+  CharacterWikiView,
+} from "./components/character/CharacterWikiView";
+
+import {
+  NovelEditorView,
+} from "./components/editor/NovelEditorView";
+
+import {
+  QuickNotesDrawer,
+} from "./components/notes/QuickNotesDrawer";
+
+import {
+  GlobalSearchModal,
+} from "./components/search/GlobalSearchModal";
 
 function MainAppContent() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    logout,
+  } = useAuth();
 
   const {
     books: contextBooks,
@@ -60,10 +108,15 @@ function MainAppContent() {
 
   const {
     chapters,
+    chaptersByBook,
+    loadingByBook,
+    loadedBooks,
     refreshChapters,
     addChapter,
     editChapter,
     removeChapter,
+    clearChapters,
+    clearAllChapters,
   } = useChapters();
 
   const {
@@ -74,60 +127,126 @@ function MainAppContent() {
     removeCharacter,
   } = useCharacters();
 
-  const [appStage, setAppStage] = useState<
-    'splash' | 'auth' | 'app'
-  >('splash');
+  const [
+    appStage,
+    setAppStage,
+  ] = useState<
+    "splash" | "auth" | "app"
+  >("splash");
 
-  const [currentView, setCurrentView] =
-    useState<AppView>('workspace');
-
-  const [quickNotes, setQuickNotes] =
-    useState<QuickNote[]>([]);
-
-  const [customGenres, setCustomGenres] =
-    useState<string[]>([]);
-
-  const [targetBookId, setTargetBookId] =
-    useState<string | null>(null);
-
-  const [targetChapterId, setTargetChapterId] =
-    useState<string | null>(null);
-
-  const [isTutorialOpen, setIsTutorialOpen] =
-    useState(false);
-
-  const [isProfileSettingsOpen, setIsProfileSettingsOpen] =
-    useState(false);
-
-  const [isSearchOpen, setIsSearchOpen] =
-    useState(false);
-
-  const [isQuickNotesOpen, setIsQuickNotesOpen] =
-    useState(false);
-
-  const books: Book[] = (contextBooks || []).map(
-    (b: any) => ({
-      ...b,
-      targetWordCount:
-        b.targetWordCount ||
-        b.target_word_count ||
-        50000,
-      currentWordCount:
-        b.currentWordCount ||
-        b.current_word_count ||
-        0,
-      genres:
-        b.genres ||
-        (b.genre ? [b.genre] : []),
-      chapters: b.chapters || [],
-    })
+  const [
+    currentView,
+    setCurrentView,
+  ] = useState<AppView>(
+    "workspace"
   );
 
-  const refreshLocalData = () => {
-    setQuickNotes(getQuickNotes());
-    setCustomGenres(getCustomGenres());
-  };
+  const [
+    quickNotes,
+    setQuickNotes,
+  ] = useState<QuickNote[]>(
+    []
+  );
 
+  const [
+    customGenres,
+    setCustomGenres,
+  ] = useState<string[]>(
+    []
+  );
+
+  const [
+    targetBookId,
+    setTargetBookId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    targetChapterId,
+    setTargetChapterId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    isTutorialOpen,
+    setIsTutorialOpen,
+  ] = useState(false);
+
+  const [
+    isProfileSettingsOpen,
+    setIsProfileSettingsOpen,
+  ] = useState(false);
+
+  const [
+    isSearchOpen,
+    setIsSearchOpen,
+  ] = useState(false);
+
+  const [
+    isQuickNotesOpen,
+    setIsQuickNotesOpen,
+  ] = useState(false);
+
+  /**
+   * Normalisasi data Book dari API.
+   *
+   * currentWordCount HARUS berasal dari:
+   *
+   * books.current_word_count
+   *
+   * yang sudah disinkronkan oleh backend
+   * berdasarkan SUM(chapters.word_count).
+   */
+  const books: Book[] =
+    useMemo(
+      () =>
+        (contextBooks || []).map(
+          (b: any) => ({
+            ...b,
+
+            targetWordCount:
+              Number(
+                b.targetWordCount ??
+                  b.target_word_count ??
+                  50000
+              ),
+
+            currentWordCount:
+              Number(
+                b.currentWordCount ??
+                  b.current_word_count ??
+                  0
+              ),
+
+            genres:
+              b.genres ||
+              (b.genre
+                ? [b.genre]
+                : []),
+
+            chapters:
+              b.chapters || [],
+          })
+        ),
+      [contextBooks]
+    );
+
+  const refreshLocalData =
+    useCallback(() => {
+      setQuickNotes(
+        getQuickNotes()
+      );
+
+      setCustomGenres(
+        getCustomGenres()
+      );
+    }, []);
+
+  /**
+   * Load character data.
+   */
   useEffect(() => {
     if (!isAuthenticated) {
       return;
@@ -139,299 +258,706 @@ function MainAppContent() {
     refreshCharacters,
   ]);
 
+  /**
+   * =========================================================
+   * LOAD SEMUA CHAPTER SEMUA BOOK
+   * =========================================================
+   *
+   * Sebelumnya hanya Book aktif/pertama yang dimuat.
+   *
+   * Akibatnya:
+   *
+   * Workspace baru masuk:
+   *   chapters = []
+   *   total bab = 0
+   *
+   * Setelah user membuka Book:
+   *   refreshChapters(bookId)
+   *   chapters menjadi terisi
+   *
+   * Sekarang semua Book yang sudah ada
+   * dimuat paralel setelah daftar Book tersedia.
+   *
+   * Ini membuat total bab di Workspace
+   * langsung berasal dari seluruh Book.
+   */
   useEffect(() => {
-    if (
-      isAuthenticated &&
-      contextBooks.length > 0
-    ) {
-      const bookId =
-        targetBookId ||
-        contextBooks[0]?.id;
-
-      if (bookId) {
-        refreshChapters(bookId);
-      }
+    if (!isAuthenticated) {
+      return;
     }
+
+    if (
+      contextBooks.length === 0
+    ) {
+      return;
+    }
+
+    const booksToLoad =
+      contextBooks.filter(
+        (book) =>
+          !loadedBooks[book.id] &&
+          !loadingByBook[book.id]
+      );
+
+    if (
+      booksToLoad.length === 0
+    ) {
+      return;
+    }
+
+    void Promise.all(
+      booksToLoad.map(
+        (book) =>
+          refreshChapters(
+            book.id
+          )
+      )
+    );
   }, [
     isAuthenticated,
-    targetBookId,
     contextBooks,
+    loadedBooks,
+    loadingByBook,
+    refreshChapters,
   ]);
 
-  const handleSplashFinish = () => {
-    if (isAuthenticated) {
-      setAppStage('app');
-    } else {
-      setAppStage('auth');
-    }
-  };
+  /**
+   * Setelah login.
+   */
+  const handleAuthSuccess =
+    useCallback(() => {
+      setAppStage("app");
 
-  const handleAuthSuccess = () => {
-    setAppStage('app');
-    refreshBooks();
-  };
+      void refreshBooks();
+    }, [refreshBooks]);
 
-  const handleCloseTutorial = () => {
-    setIsTutorialOpen(false);
+  /**
+   * Splash selesai.
+   */
+  const handleSplashFinish =
+    useCallback(() => {
+      if (isAuthenticated) {
+        setAppStage("app");
+      } else {
+        setAppStage("auth");
+      }
+    }, [isAuthenticated]);
 
-    purgeTutorialDummyData();
+  /**
+   * Tutorial close.
+   */
+  const handleCloseTutorial =
+    useCallback(() => {
+      setIsTutorialOpen(false);
 
-    if (
-      targetBookId &&
-      (
-        targetBookId.startsWith('tut-dummy') ||
-        targetBookId === TUTORIAL_DUMMY_BOOK_ID
-      )
-    ) {
-      setTargetBookId(null);
-    }
+      purgeTutorialDummyData();
 
-    if (
-      targetChapterId &&
-      (
-        targetChapterId.startsWith('tut-dummy') ||
-        targetChapterId === TUTORIAL_DUMMY_CHAPTER_1_ID
-      )
-    ) {
-      setTargetChapterId(null);
-    }
-
-    refreshLocalData();
-  };
-
-  const handleTutorialComplete = () => {
-    handleCloseTutorial();
-  };
-
-  const handleLogout = () => {
-    logout();
-    setAppStage('auth');
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
       if (
-        (e.ctrlKey || e.metaKey) &&
-        e.key.toLowerCase() === 'k'
+        targetBookId &&
+        (
+          targetBookId.startsWith(
+            "tut-dummy"
+          ) ||
+          targetBookId ===
+            TUTORIAL_DUMMY_BOOK_ID
+        )
       ) {
-        e.preventDefault();
-        setIsSearchOpen((prev) => !prev);
+        setTargetBookId(null);
       }
 
       if (
-        (e.ctrlKey || e.metaKey) &&
-        e.key.toLowerCase() === 'm'
+        targetChapterId &&
+        (
+          targetChapterId.startsWith(
+            "tut-dummy"
+          ) ||
+          targetChapterId ===
+            TUTORIAL_DUMMY_CHAPTER_1_ID
+        )
+      ) {
+        setTargetChapterId(null);
+      }
+
+      refreshLocalData();
+    }, [
+      targetBookId,
+      targetChapterId,
+      refreshLocalData,
+    ]);
+
+  const handleTutorialComplete =
+    useCallback(() => {
+      handleCloseTutorial();
+    }, [
+      handleCloseTutorial,
+    ]);
+
+  /**
+   * Logout.
+   */
+  const handleLogout =
+    useCallback(() => {
+      logout();
+
+      clearAllChapters();
+
+      setTargetBookId(null);
+      setTargetChapterId(null);
+
+      setAppStage("auth");
+    }, [
+      logout,
+      clearAllChapters,
+    ]);
+
+  /**
+   * Keyboard shortcuts.
+   */
+  useEffect(() => {
+    const handleKeyDown = (
+      e: KeyboardEvent
+    ) => {
+      if (
+        (e.ctrlKey ||
+          e.metaKey) &&
+        e.key.toLowerCase() ===
+          "k"
       ) {
         e.preventDefault();
-        setIsQuickNotesOpen((prev) => !prev);
+
+        setIsSearchOpen(
+          (prev) => !prev
+        );
+      }
+
+      if (
+        (e.ctrlKey ||
+          e.metaKey) &&
+        e.key.toLowerCase() ===
+          "m"
+      ) {
+        e.preventDefault();
+
+        setIsQuickNotesOpen(
+          (prev) => !prev
+        );
       }
     };
 
     window.addEventListener(
-      'keydown',
+      "keydown",
       handleKeyDown
     );
 
     return () => {
       window.removeEventListener(
-        'keydown',
+        "keydown",
         handleKeyDown
       );
     };
   }, []);
 
-  const handleSaveBook = async (book: Book) => {
-    const targetWords =
-      book.targetWordCount ||
-      (book as any).target_word_count ||
-      50000;
+  /**
+   * Save Book.
+   */
+  const handleSaveBook =
+    useCallback(
+      async (book: Book) => {
+        const targetWords =
+          Number(
+            book.targetWordCount ??
+              (book as any)
+                .target_word_count ??
+              50000
+          );
 
-    if (book.id) {
-      await editBook(
-        book.id,
-        {
-          title: book.title,
-          synopsis: book.synopsis,
-          targetWordCount: Number(targetWords),
-          status: book.status,
+        /**
+         * Book baru harus TIDAK memiliki ID.
+         *
+         * BookModal yang sudah diperbaiki
+         * sekarang tidak boleh membuat fake ID.
+         */
+        if (!book.id) {
+          await addBook({
+            title: book.title,
+            synopsis:
+              book.synopsis,
+            targetWordCount:
+              targetWords,
+            status:
+              book.status ||
+              "draft",
+          });
+
+          return;
         }
-      );
-    } else {
-      await addBook({
-        title: book.title,
-        synopsis: book.synopsis,
-        targetWordCount: Number(targetWords),
-        status: book.status || 'draft',
-      });
-    }
-  };
 
-  const handleDeleteBook = async (
-    bookId: string
-  ) => {
-    if (bookId) {
-      await removeBook(bookId);
-    }
-  };
+        await editBook(
+          book.id,
+          {
+            title: book.title,
+            synopsis:
+              book.synopsis,
+            targetWordCount:
+              targetWords,
+            status:
+              book.status,
+          }
+        );
+      },
+      [
+        editBook,
+        addBook,
+      ]
+    );
 
-  const handleSaveChapter = async (
-    chapter: Chapter
-  ) => {
-    try {
-      await editChapter(
-        chapter.bookId,
-        chapter.id,
-        {
-          chapterNumber: chapter.chapterNumber,
-          title: chapter.title,
-          content: chapter.content,
-          wordCount: chapter.wordCount,
-          characterCount: chapter.characterCount,
-          status: chapter.status,
-          sortOrder: chapter.order,
+  /**
+   * Delete Book.
+   */
+  const handleDeleteBook =
+    useCallback(
+      async (bookId: string) => {
+        if (!bookId) {
+          return;
         }
-      );
-    } catch (error) {
-      console.error(
-        'Gagal menyimpan chapter:',
-        error
-      );
 
-      throw error;
-    }
-  };
+        try {
+          await removeBook(
+            bookId
+          );
 
-  const handleDeleteChapter = async (
-    chapterId: string
-  ) => {
-    const chapter =
-      chapters.find(
-        (item) => item.id === chapterId
-      );
+          /**
+           * Hapus cache chapter
+           * hanya milik Book tersebut.
+           */
+          clearChapters(
+            bookId
+          );
 
-    if (!chapter) {
-      return;
-    }
+          if (
+            targetBookId ===
+            bookId
+          ) {
+            setTargetBookId(null);
+            setTargetChapterId(
+              null
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Gagal menghapus book:",
+            error
+          );
 
-    try {
-      await removeChapter(
-        chapter.bookId,
-        chapterId
-      );
-    } catch (error) {
-      console.error(
-        'Gagal menghapus chapter:',
-        error
-      );
+          throw error;
+        }
+      },
+      [
+        removeBook,
+        clearChapters,
+        targetBookId,
+      ]
+    );
 
-      throw error;
-    }
-  };
+  /**
+   * =========================================================
+   * SAVE CHAPTER
+   * =========================================================
+   *
+   * Setelah backend menyimpan chapter:
+   *
+   * Chapter:
+   *   word_count = hasil countWords(content)
+   *
+   * lalu backend:
+   *   books.current_word_count =
+   *   SUM(chapters.word_count)
+   *
+   * Setelah itu frontend:
+   *   refreshBooks()
+   *
+   * Jadi progress berasal dari PostgreSQL.
+   */
+  const handleSaveChapter =
+    useCallback(
+      async (
+        chapter: Chapter
+      ) => {
+        if (!chapter.bookId) {
+          return;
+        }
 
-  const handleSaveCharacter = async (
-    character: CharacterWiki
-  ) => {
-    try {
-      const payload = {
-        fullName: character.fullName,
-        alias: character.alias,
-        age: character.age,
-        gender: character.gender,
-        roleTag: character.roleTag,
-        status: character.status,
-        avatarUrl: character.avatarUrl,
-        physicalAppearance:
-          character.physicalAppearance,
-        personalityTraits:
-          character.personalityTraits,
-        backstory:
-          character.backstory,
-        motivation:
-          character.motivation,
-        worldGoal:
-          character.worldGoal,
-        bookIds:
-          character.bookIds,
-      };
+        const bookId =
+          chapter.bookId;
 
-      if (character.id) {
-        await editCharacter(
-          character.id,
-          payload
+        try {
+          const isNewChapter =
+            !chapter.id ||
+            chapter.id.startsWith(
+              "chap_"
+            ) ||
+            chapter.id.startsWith(
+              "tut-dummy"
+            );
+
+          if (
+            isNewChapter
+          ) {
+            await addChapter(
+              bookId,
+              {
+                chapterNumber:
+                  chapter.chapterNumber,
+
+                title:
+                  chapter.title,
+
+                content:
+                  chapter.content,
+
+                status:
+                  chapter.status,
+
+                sortOrder:
+                  chapter.order,
+              }
+            );
+          } else {
+            await editChapter(
+              bookId,
+              chapter.id,
+              {
+                chapterNumber:
+                  chapter.chapterNumber,
+
+                title:
+                  chapter.title,
+
+                content:
+                  chapter.content,
+
+                status:
+                  chapter.status,
+
+                sortOrder:
+                  chapter.order,
+              }
+            );
+          }
+
+          /**
+           * Backend sekarang sudah memperbarui:
+           *
+           * books.current_word_count
+           *
+           * berdasarkan SUM(chapters.word_count).
+           *
+           * Ambil ulang Book dari PostgreSQL
+           * agar Workspace menggunakan nilai
+           * source of truth terbaru.
+           */
+          await refreshBooks();
+
+          /**
+           * Refresh chapter Book tersebut
+           * supaya cache chapter juga sama
+           * dengan DB.
+           */
+          await refreshChapters(
+            bookId
+          );
+        } catch (error) {
+          console.error(
+            "Gagal menyimpan chapter:",
+            error
+          );
+
+          throw error;
+        }
+      },
+      [
+        addChapter,
+        editChapter,
+        refreshBooks,
+        refreshChapters,
+      ]
+    );
+
+  /**
+   * Delete Chapter.
+   */
+  const handleDeleteChapter =
+    useCallback(
+      async (
+        chapterId: string
+      ) => {
+        if (
+          !targetBookId ||
+          !chapterId
+        ) {
+          return;
+        }
+
+        const bookChapters =
+          chaptersByBook[
+            targetBookId
+          ] ?? [];
+
+        const chapter =
+          bookChapters.find(
+            (item) =>
+              item.id ===
+              chapterId
+          );
+
+        if (!chapter) {
+          return;
+        }
+
+        try {
+          await removeChapter(
+            targetBookId,
+            chapterId
+          );
+
+          /**
+           * Backend sudah menghitung ulang
+           * books.current_word_count setelah
+           * chapter dihapus.
+           */
+          await refreshBooks();
+
+          /**
+           * Pastikan cache Book tetap
+           * sinkron dengan DB.
+           */
+          await refreshChapters(
+            targetBookId
+          );
+
+          if (
+            targetChapterId ===
+            chapterId
+          ) {
+            setTargetChapterId(
+              null
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Gagal menghapus chapter:",
+            error
+          );
+
+          throw error;
+        }
+      },
+      [
+        targetBookId,
+        targetChapterId,
+        chaptersByBook,
+        removeChapter,
+        refreshBooks,
+        refreshChapters,
+      ]
+    );
+
+  /**
+   * Save Character.
+   */
+  const handleSaveCharacter =
+    useCallback(
+      async (
+        character: CharacterWiki
+      ) => {
+        try {
+          const payload = {
+            fullName:
+              character.fullName,
+
+            alias:
+              character.alias,
+
+            age:
+              character.age,
+
+            gender:
+              character.gender,
+
+            roleTag:
+              character.roleTag,
+
+            status:
+              character.status,
+
+            avatarUrl:
+              character.avatarUrl,
+
+            physicalAppearance:
+              character.physicalAppearance,
+
+            personalityTraits:
+              character.personalityTraits,
+
+            backstory:
+              character.backstory,
+
+            motivation:
+              character.motivation,
+
+            worldGoal:
+              character.worldGoal,
+
+            bookIds:
+              character.bookIds,
+          };
+
+          if (
+            character.id
+          ) {
+            await editCharacter(
+              character.id,
+              payload
+            );
+          } else {
+            await addCharacter(
+              payload
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Gagal menyimpan character:",
+            error
+          );
+
+          throw error;
+        }
+      },
+      [
+        editCharacter,
+        addCharacter,
+      ]
+    );
+
+  /**
+   * Delete Character.
+   */
+  const handleDeleteCharacter =
+    useCallback(
+      async (
+        characterId: string
+      ) => {
+        try {
+          await removeCharacter(
+            characterId
+          );
+        } catch (error) {
+          console.error(
+            "Gagal menghapus character:",
+            error
+          );
+
+          throw error;
+        }
+      },
+      [removeCharacter]
+    );
+
+  /**
+   * Save Quick Note.
+   */
+  const handleSaveQuickNote =
+    useCallback(
+      (note: QuickNote) => {
+        saveQuickNote(note);
+
+        setQuickNotes(
+          getQuickNotes()
         );
-      } else {
-        await addCharacter(
-          payload
+      },
+      []
+    );
+
+  /**
+   * Delete Quick Note.
+   */
+  const handleDeleteQuickNote =
+    useCallback(
+      (noteId: string) => {
+        deleteQuickNote(
+          noteId
         );
-      }
-    } catch (error) {
-      console.error(
-        'Gagal menyimpan character:',
-        error
-      );
 
-      throw error;
-    }
-  };
-
-  const handleDeleteCharacter = async (
-    characterId: string
-  ) => {
-    try {
-      await removeCharacter(
-        characterId
-      );
-    } catch (error) {
-      console.error(
-        'Gagal menghapus character:',
-        error
-      );
-
-      throw error;
-    }
-  };
-
-  const handleSaveQuickNote = (
-    note: QuickNote
-  ) => {
-    saveQuickNote(note);
-    setQuickNotes(
-      getQuickNotes()
+        setQuickNotes(
+          getQuickNotes()
+        );
+      },
+      []
     );
-  };
 
-  const handleDeleteQuickNote = (
-    noteId: string
-  ) => {
-    deleteQuickNote(noteId);
-    setQuickNotes(
-      getQuickNotes()
+  /**
+   * Add custom genre.
+   */
+  const handleAddCustomGenre =
+    useCallback(
+      (genre: string) => {
+        saveCustomGenre(
+          genre
+        );
+
+        setCustomGenres(
+          getCustomGenres()
+        );
+      },
+      []
     );
-  };
 
-  const handleAddCustomGenre = (
-    genre: string
-  ) => {
-    saveCustomGenre(genre);
-    setCustomGenres(
-      getCustomGenres()
+  /**
+   * Open Editor.
+   */
+  const handleOpenEditor =
+    useCallback(
+      (
+        bookId: string,
+        chapterId?: string
+      ) => {
+        const bookExists =
+          books.some(
+            (book) =>
+              book.id ===
+              bookId
+          );
+
+        const dummyBookExists =
+          isTutorialOpen &&
+          displayTutorialBookIds().has(
+            bookId
+          );
+
+        if (
+          !bookExists &&
+          !dummyBookExists
+        ) {
+          return;
+        }
+
+        setTargetBookId(
+          bookId
+        );
+
+        setTargetChapterId(
+          chapterId ?? null
+        );
+
+        setCurrentView(
+          "editor"
+        );
+      },
+      [
+        books,
+        isTutorialOpen,
+      ]
     );
-  };
-
-  const handleOpenEditor = (
-    bookId: string,
-    chapterId?: string
-  ) => {
-    setTargetBookId(bookId);
-
-    if (chapterId) {
-      setTargetChapterId(
-        chapterId
-      );
-    }
-
-    setCurrentView('editor');
-  };
 
   const isDummyActive =
     isTutorialOpen;
@@ -460,32 +986,204 @@ function MainAppContent() {
       ? TUTORIAL_DUMMY_QUICK_NOTES
       : quickNotes;
 
+  function displayTutorialBookIds(): Set<string> {
+    return new Set(
+      TUTORIAL_DUMMY_BOOKS.map(
+        (book) =>
+          book.id
+      )
+    );
+  }
+
+  /**
+   * Active Editor Book.
+   */
   const activeEditorBookId =
-    targetBookId ||
-    (
-      isDummyActive &&
-      displayBooks.length > 0
-        ? displayBooks[0].id
-        : null
-    );
+    useMemo(() => {
+      if (
+        targetBookId &&
+        displayBooks.some(
+          (book) =>
+            book.id ===
+            targetBookId
+        )
+      ) {
+        return targetBookId;
+      }
 
+      if (
+        isDummyActive &&
+        displayBooks.length >
+          0
+      ) {
+        return displayBooks[0]
+          .id;
+      }
+
+      return (
+        displayBooks[0]?.id ??
+        null
+      );
+    }, [
+      targetBookId,
+      displayBooks,
+      isDummyActive,
+    ]);
+
+  /**
+   * Active Editor Chapter.
+   */
   const activeEditorChapterId =
-    targetChapterId ||
-    (
-      isDummyActive &&
-      displayChapters.length > 0
-        ? (
-            displayChapters.find(
-              (c) =>
-                c.bookId ===
-                activeEditorBookId
-            )?.id ||
-            displayChapters[0]?.id
-          )
-        : null
-    );
+    useMemo(() => {
+      if (
+        !activeEditorBookId
+      ) {
+        return null;
+      }
 
-  if (appStage === 'splash') {
+      const isDummyBook =
+        isDummyActive &&
+        TUTORIAL_DUMMY_BOOKS.some(
+          (book) =>
+            book.id ===
+            activeEditorBookId
+        );
+
+      const availableChapters =
+        isDummyBook
+          ? displayChapters.filter(
+              (chapter) =>
+                chapter.bookId ===
+                activeEditorBookId
+            )
+          : (
+              chaptersByBook[
+                activeEditorBookId
+              ] ?? []
+            );
+
+      if (
+        targetChapterId &&
+        availableChapters.some(
+          (chapter) =>
+            chapter.id ===
+            targetChapterId
+        )
+      ) {
+        return targetChapterId;
+      }
+
+      return (
+        availableChapters[0]
+          ?.id ?? null
+      );
+    }, [
+      activeEditorBookId,
+      targetChapterId,
+      chaptersByBook,
+      displayChapters,
+      isDummyActive,
+    ]);
+
+  /**
+   * Bersihkan target Book jika Book
+   * sudah tidak tersedia.
+   */
+  useEffect(() => {
+    if (!targetBookId) {
+      return;
+    }
+
+    const bookExists =
+      displayBooks.some(
+        (book) =>
+          book.id ===
+          targetBookId
+      );
+
+    if (!bookExists) {
+      setTargetBookId(null);
+      setTargetChapterId(null);
+    }
+  }, [
+    targetBookId,
+    displayBooks,
+  ]);
+
+  /**
+   * Bersihkan target Chapter jika
+   * sudah tidak menjadi milik Book aktif.
+   */
+  useEffect(() => {
+    if (
+      !targetBookId ||
+      !targetChapterId
+    ) {
+      return;
+    }
+
+    const isDummyBook =
+      isDummyActive &&
+      TUTORIAL_DUMMY_BOOKS.some(
+        (book) =>
+          book.id ===
+          targetBookId
+      );
+
+    const availableChapters =
+      isDummyBook
+        ? displayChapters.filter(
+            (chapter) =>
+              chapter.bookId ===
+              targetBookId
+          )
+        : (
+            chaptersByBook[
+              targetBookId
+            ] ?? []
+          );
+
+    const chapterExists =
+      availableChapters.some(
+        (chapter) =>
+          chapter.id ===
+          targetChapterId
+      );
+
+    if (!chapterExists) {
+      setTargetChapterId(
+        null
+      );
+    }
+  }, [
+    targetBookId,
+    targetChapterId,
+    chaptersByBook,
+    displayChapters,
+    isDummyActive,
+  ]);
+
+  /**
+   * Local data.
+   */
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    refreshLocalData();
+  }, [
+    isAuthenticated,
+    refreshLocalData,
+  ]);
+
+  /**
+   * Splash.
+   */
+  if (
+    appStage ===
+    "splash"
+  ) {
     return (
       <SplashScreen
         onFinish={
@@ -495,8 +1193,11 @@ function MainAppContent() {
     );
   }
 
+  /**
+   * Authentication.
+   */
   if (
-    appStage === 'auth' ||
+    appStage === "auth" ||
     !isAuthenticated
   ) {
     return (
@@ -510,11 +1211,18 @@ function MainAppContent() {
     );
   }
 
+  /**
+   * Main Application.
+   */
   return (
     <div className="min-h-screen bg-[#121212] text-[#E0E0E0] flex flex-col font-sans selection:bg-[#D4AF37]/25 selection:text-[#FAF7EE]">
       <Navbar
-        currentView={currentView}
-        userProfile={user as any}
+        currentView={
+          currentView
+        }
+        userProfile={
+          user as any
+        }
         notesCount={
           displayQuickNotes.length
         }
@@ -522,7 +1230,9 @@ function MainAppContent() {
           setCurrentView(view)
         }
         onOpenSearch={() =>
-          setIsSearchOpen(true)
+          setIsSearchOpen(
+            true
+          )
         }
         onToggleNotes={() =>
           setIsQuickNotesOpen(
@@ -530,45 +1240,91 @@ function MainAppContent() {
           )
         }
         onOpenTutorial={() =>
-          setIsTutorialOpen(true)
+          setIsTutorialOpen(
+            true
+          )
         }
         onOpenProfileSettings={() =>
           setIsProfileSettingsOpen(
             true
           )
         }
-        onLogout={handleLogout}
+        onLogout={
+          handleLogout
+        }
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {currentView === 'workspace' && (
+        {currentView ===
+          "workspace" && (
           <WorkspaceView
-            books={displayBooks}
-            chapters={displayChapters}
-            customGenres={customGenres}
-            userProfile={user as any}
-            onSaveBook={handleSaveBook}
-            onDeleteBook={handleDeleteBook}
-            onSaveChapter={handleSaveChapter}
-            onDeleteChapter={handleDeleteChapter}
+            books={
+              displayBooks
+            }
+            chapters={
+              displayChapters
+            }
+            chaptersByBook={
+              chaptersByBook
+            }
+            loadingByBook={
+              loadingByBook
+            }
+            activeBookId={
+              targetBookId
+            }
+            customGenres={
+              customGenres
+            }
+            userProfile={
+              user as any
+            }
+            onSaveBook={
+              handleSaveBook
+            }
+            onDeleteBook={
+              handleDeleteBook
+            }
+            onSaveChapter={
+              handleSaveChapter
+            }
+            onDeleteChapter={
+              handleDeleteChapter
+            }
             onAddCustomGenre={
               handleAddCustomGenre
             }
             onOpenEditor={
               handleOpenEditor
             }
+            onSelectBook={(
+              bookId
+            ) => {
+              setTargetBookId(
+                bookId
+              );
+
+              setTargetChapterId(
+                null
+              );
+            }}
             onOpenCharactersWiki={() =>
-              setCurrentView('characters')
+              setCurrentView(
+                "characters"
+              )
             }
           />
         )}
 
-        {currentView === 'characters' && (
+        {currentView ===
+          "characters" && (
           <CharacterWikiView
             characters={
               displayCharacters
             }
-            books={displayBooks}
+            books={
+              displayBooks
+            }
             onSaveCharacter={
               handleSaveCharacter
             }
@@ -578,23 +1334,44 @@ function MainAppContent() {
           />
         )}
 
-        {currentView === 'editor' && (
+        {currentView ===
+          "editor" && (
           <NovelEditorView
-            books={displayBooks}
-            chapters={displayChapters}
+            books={
+              displayBooks
+            }
+            chapters={
+              displayChapters
+            }
+            chaptersByBook={
+              chaptersByBook
+            }
             initialBookId={
               activeEditorBookId
             }
             initialChapterId={
               activeEditorChapterId
             }
-            userProfile={user as any}
+            userProfile={
+              user as any
+            }
             onSaveChapter={
               handleSaveChapter
             }
-            onSelectBook={(bookId) => {
-              setTargetBookId(bookId);
-              setCurrentView('workspace');
+            onSelectBook={(
+              bookId
+            ) => {
+              setTargetBookId(
+                bookId
+              );
+
+              setTargetChapterId(
+                null
+              );
+
+              setCurrentView(
+                "workspace"
+              );
             }}
           />
         )}
@@ -612,9 +1389,13 @@ function MainAppContent() {
 
           <span className="hidden sm:inline">
             Database: Karakter (
-            {displayCharacters.length}
+            {
+              displayCharacters.length
+            }
             ) | Cerita (
-            {displayBooks.length}
+            {
+              displayBooks.length
+            }
             )
           </span>
         </div>
@@ -635,10 +1416,16 @@ function MainAppContent() {
       </footer>
 
       <QuickNotesDrawer
-        isOpen={isQuickNotesOpen}
-        notes={displayQuickNotes}
+        isOpen={
+          isQuickNotesOpen
+        }
+        notes={
+          displayQuickNotes
+        }
         onClose={() =>
-          setIsQuickNotesOpen(false)
+          setIsQuickNotesOpen(
+            false
+          )
         }
         onSaveNote={
           handleSaveQuickNote
@@ -649,35 +1436,131 @@ function MainAppContent() {
       />
 
       <GlobalSearchModal
-        isOpen={isSearchOpen}
-        books={displayBooks}
-        chapters={displayChapters}
-        characters={displayCharacters}
-        notes={displayQuickNotes}
-        onClose={() =>
-          setIsSearchOpen(false)
+        isOpen={
+          isSearchOpen
         }
-        onSelectBook={(bId) => {
-          setTargetBookId(bId);
-          setCurrentView('workspace');
+        books={
+          displayBooks
+        }
+        chapters={
+          displayChapters
+        }
+        characters={
+          displayCharacters
+        }
+        notes={
+          displayQuickNotes
+        }
+        onClose={() =>
+          setIsSearchOpen(
+            false
+          )
+        }
+        onSelectBook={(
+          bookId
+        ) => {
+          const bookExists =
+            displayBooks.some(
+              (book) =>
+                book.id ===
+                bookId
+            );
+
+          if (!bookExists) {
+            return;
+          }
+
+          setTargetBookId(
+            bookId
+          );
+
+          setTargetChapterId(
+            null
+          );
+
+          setCurrentView(
+            "workspace"
+          );
         }}
-        onSelectChapter={(bId, cId) => {
-          setTargetBookId(bId);
-          setTargetChapterId(cId);
-          setCurrentView('editor');
+        onSelectChapter={(
+          bookId,
+          chapterId
+        ) => {
+          const bookExists =
+            displayBooks.some(
+              (book) =>
+                book.id ===
+                bookId
+            );
+
+          if (!bookExists) {
+            return;
+          }
+
+          const isDummyBook =
+            isDummyActive &&
+            TUTORIAL_DUMMY_BOOKS.some(
+              (book) =>
+                book.id ===
+                bookId
+            );
+
+          const availableChapters =
+            isDummyBook
+              ? displayChapters.filter(
+                  (chapter) =>
+                    chapter.bookId ===
+                    bookId
+                )
+              : (
+                  chaptersByBook[
+                    bookId
+                  ] ?? []
+                );
+
+          const chapterExists =
+            availableChapters.some(
+              (chapter) =>
+                chapter.id ===
+                chapterId
+            );
+
+          if (!chapterExists) {
+            return;
+          }
+
+          setTargetBookId(
+            bookId
+          );
+
+          setTargetChapterId(
+            chapterId
+          );
+
+          setCurrentView(
+            "editor"
+          );
         }}
-        onSelectCharacter={() => {
-          setCurrentView('characters');
-        }}
+        onSelectCharacter={() =>
+          setCurrentView(
+            "characters"
+          )
+        }
       />
 
       <VisualNovelTutorial
-        isOpen={isTutorialOpen}
-        currentView={currentView}
+        isOpen={
+          isTutorialOpen
+        }
+        currentView={
+          currentView
+        }
         onNavigate={(view) =>
           setCurrentView(view)
         }
-        onClose={handleCloseTutorial}
+        onClose={
+          handleCloseTutorial
+        }
         onComplete={
           handleTutorialComplete
         }
@@ -687,14 +1570,18 @@ function MainAppContent() {
         isOpen={
           isProfileSettingsOpen
         }
-        userProfile={user as any}
+        userProfile={
+          user as any
+        }
         onClose={() =>
           setIsProfileSettingsOpen(
             false
           )
         }
         onSaveProfile={() => {}}
-        onDataRestored={refreshBooks}
+        onDataRestored={
+          refreshBooks
+        }
       />
     </div>
   );

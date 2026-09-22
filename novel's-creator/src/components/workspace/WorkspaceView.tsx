@@ -23,6 +23,9 @@ import {
 interface WorkspaceViewProps {
   books: Book[];
   chapters: Chapter[];
+  chaptersByBook: Record<string, Chapter[]>;
+  loadingByBook: Record<string, boolean>;
+  activeBookId: string | null;
   customGenres: string[];
   userProfile: UserAuthorProfile | null;
   onSaveBook: (book: Book) => void;
@@ -31,12 +34,16 @@ interface WorkspaceViewProps {
   onDeleteChapter: (chapterId: string) => void;
   onAddCustomGenre: (genre: string) => void;
   onOpenEditor: (bookId: string, chapterId?: string) => void;
+  onSelectBook: (bookId: string | null) => void;
   onOpenCharactersWiki: () => void;
 }
 
 export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   books,
   chapters,
+  chaptersByBook,
+  loadingByBook,
+  activeBookId,
   customGenres,
   userProfile,
   onSaveBook,
@@ -45,10 +52,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onDeleteChapter,
   onAddCustomGenre,
   onOpenEditor,
+  onSelectBook,
   onOpenCharactersWiki,
 }) => {
-  // Selected Book for Detailed Chapter View
-  const [activeBookId, setActiveBookId] = useState<string | null>(null);
 
   // Modals state
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -66,9 +72,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const activeBook = books.find((b) => b.id === activeBookId) || null;
+
   const activeBookChapters = activeBookId
-    ? chapters.filter((c) => c.bookId === activeBookId).sort((a, b) => a.order - b.order)
+    ? [...(chaptersByBook[activeBookId] ?? [])].sort(
+      (a, b) => a.order - b.order
+    )
     : [];
+
+  const activeBookChaptersLoading = activeBookId
+    ? Boolean(loadingByBook[activeBookId])
+    : false;
 
   // Filtered books
   const filteredBooks = books.filter((book) => {
@@ -88,7 +101,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   // Calculate overall stats
   const totalBooksCount = books.length;
-  const totalChaptersCount = chapters.length;
+
+  const totalChaptersCount = Object.values(chaptersByBook).reduce(
+    (total, bookChapters) => total + bookChapters.length,
+    0
+  );
+
   const totalWordsWritten = books.reduce((acc, b) => acc + (b.currentWordCount || 0), 0);
 
   const handleOpenNewBookModal = () => {
@@ -116,14 +134,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   const handleConfirmDelete = () => {
     if (!deleteConfirmId) return;
+
     if (deleteConfirmType === 'book') {
       onDeleteBook(deleteConfirmId);
+
       if (activeBookId === deleteConfirmId) {
-        setActiveBookId(null);
+        onSelectBook(null);
       }
     } else {
       onDeleteChapter(deleteConfirmId);
     }
+
     setDeleteConfirmId(null);
   };
 
@@ -203,13 +224,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           <div className="w-12 h-12 rounded-full border-2 border-[#D4AF37] flex items-center justify-center font-bold text-xs font-mono text-[#D4AF37] bg-[#1E1E2E] shadow-sm">
             {books.length > 0
               ? `${Math.min(
-                  100,
-                  Math.round(
-                    (totalWordsWritten /
-                      (books.reduce((acc, b) => acc + (b.targetWordCount || 50000), 0) || 1)) *
-                      100
-                  )
-                )}%`
+                100,
+                Math.round(
+                  (totalWordsWritten /
+                    (books.reduce((acc, b) => acc + (b.targetWordCount || 50000), 0) || 1)) *
+                  100
+                )
+              )}%`
               : '0%'}
           </div>
         </div>
@@ -220,7 +241,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         <div className="space-y-4">
           {/* Back to all books breadcrumb */}
           <button
-            onClick={() => setActiveBookId(null)}
+            onClick={() => onSelectBook(null)}
             className="text-xs text-[#D4AF37] hover:underline flex items-center gap-1 cursor-pointer"
           >
             <span>&larr; Kembali ke Semua Buku</span>
@@ -253,10 +274,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                       {activeBook.status === 'completed'
                         ? 'Selesai'
                         : activeBook.status === 'draft'
-                        ? 'Draft Awal'
-                        : activeBook.status === 'hiatus'
-                        ? 'Hiatus'
-                        : 'Ongoing'}
+                          ? 'Draft Awal'
+                          : activeBook.status === 'hiatus'
+                            ? 'Hiatus'
+                            : 'Ongoing'}
                     </span>
                     <span className="text-xs text-[#8E8EA4] font-mono">
                       {activeBookChapters.length} Bab
@@ -321,7 +342,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                         100,
                         Math.round(
                           (activeBook.currentWordCount / (activeBook.targetWordCount || 1)) *
-                            100
+                          100
                         )
                       )}
                       %
@@ -334,7 +355,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                         width: `${Math.min(
                           100,
                           (activeBook.currentWordCount / (activeBook.targetWordCount || 1)) *
-                            100
+                          100
                         )}%`,
                       }}
                     />
@@ -363,8 +384,24 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               </button>
             </div>
 
-            {/* EMPTY STATE CHAPTERS */}
-            {activeBookChapters.length === 0 ? (
+            {/* CHAPTER CONTENT */}
+            {activeBookChaptersLoading ? (
+              <div
+                className="py-12 px-4 text-center border-2 border-dashed border-[#2A2A3C] rounded-2xl bg-[#161624] flex flex-col items-center justify-center"
+              >
+                <div className="p-3 bg-[#202030] rounded-2xl border border-[#303046] text-[#D4AF37]/70 mb-3">
+                  <FileText className="w-8 h-8 animate-pulse" />
+                </div>
+
+                <h4 className="font-editorial text-base font-bold text-[#FAF7EE] mb-1">
+                  Memuat bab...
+                </h4>
+
+                <p className="text-xs text-[#8E8EA4] max-w-sm">
+                  Sedang mengambil daftar bab untuk buku ini.
+                </p>
+              </div>
+            ) : activeBookChapters.length === 0 ? (
               <div
                 id="empty-chapters-state"
                 className="py-12 px-4 text-center border-2 border-dashed border-[#2A2A3C] rounded-2xl bg-[#161624] flex flex-col items-center justify-center"
@@ -410,8 +447,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                             {chap.status === 'published'
                               ? 'Siap Terbit'
                               : chap.status === 'review'
-                              ? 'Revisi'
-                              : 'Draft'}
+                                ? 'Revisi'
+                                : 'Draft'}
                           </span>
                         </div>
                       </div>
@@ -546,7 +583,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             /* BOOKS GRID */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-tour="workspace-books-grid">
               {filteredBooks.map((book) => {
-                const bookChaptersCount = chapters.filter((c) => c.bookId === book.id).length;
+                const bookChaptersCount = (chaptersByBook[book.id] ?? []).length;
                 const progressPct = Math.min(
                   100,
                   Math.round(((book.currentWordCount || 0) / (book.targetWordCount || 1)) * 100)
@@ -555,7 +592,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                 return (
                   <div
                     key={book.id}
-                    onClick={() => setActiveBookId(book.id)}
+                    onClick={() => onSelectBook(book.id)}
                     className="bg-[#1E1E2E] hover:bg-[#222236] border border-[#2A2A3C] hover:border-[#D4AF37]/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all duration-200 cursor-pointer group relative overflow-hidden"
                   >
                     {/* Top row: Cover & Header */}
@@ -584,10 +621,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
                               {book.status === 'completed'
                                 ? 'Selesai'
                                 : book.status === 'draft'
-                                ? 'Draft'
-                                : book.status === 'hiatus'
-                                ? 'Hiatus'
-                                : 'Ongoing'}
+                                  ? 'Draft'
+                                  : book.status === 'hiatus'
+                                    ? 'Hiatus'
+                                    : 'Ongoing'}
                             </span>
                             <span className="text-[11px] text-[#7E7E94] font-mono">
                               {bookChaptersCount} Bab

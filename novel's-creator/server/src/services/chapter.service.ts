@@ -39,6 +39,44 @@ function countCharacters(text: string): number {
   return text.length;
 }
 
+/**
+ * Source of truth untuk progress Book.
+ *
+ * books.current_word_count tidak dihitung dari state frontend.
+ *
+ * Nilainya selalu disinkronkan dari:
+ *
+ * SUM(chapters.word_count)
+ *
+ * untuk Book tersebut.
+ */
+async function syncBookWordCount(
+  bookId: string
+): Promise<number> {
+  const result = await pool.query(
+    `
+    UPDATE books
+    SET
+      current_word_count = COALESCE(
+        (
+          SELECT SUM(c.word_count)
+          FROM chapters c
+          WHERE c.book_id = books.id
+        ),
+        0
+      ),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1
+    RETURNING current_word_count
+    `,
+    [bookId]
+  );
+
+  return Number(
+    result.rows[0]?.current_word_count ?? 0
+  );
+}
+
 async function verifyBookOwnership(
   bookId: string,
   userId: string
@@ -165,12 +203,17 @@ export async function createChapter(
     );
 
   if (!bookExists) {
-    throw new Error("BOOK_NOT_FOUND");
+    throw new Error(
+      "BOOK_NOT_FOUND"
+    );
   }
 
-  const content = data.content ?? "";
+  const content =
+    data.content ?? "";
 
-  const wordCount = countWords(content);
+  const wordCount =
+    countWords(content);
+
   const characterCount =
     countCharacters(content);
 
@@ -281,6 +324,14 @@ export async function createChapter(
         ]
       );
 
+    /**
+     * Setelah chapter berhasil dibuat,
+     * hitung ulang total kata Book dari DB.
+     */
+    await syncBookWordCount(
+      bookId
+    );
+
     return result.rows[0];
   } catch (error: any) {
     if (
@@ -315,6 +366,13 @@ export async function updateChapter(
   const content =
     data.content;
 
+  /**
+   * Word count selalu dihitung dari
+   * content aktual.
+   *
+   * Frontend tidak menjadi sumber
+   * kebenaran word count.
+   */
   const wordCount =
     content !== undefined
       ? countWords(content)
@@ -408,13 +466,33 @@ export async function updateChapter(
             ? content
             : null,
           wordCount ?? null,
-          characterCount ?? null,
+          characterCount ??
+            null,
           data.status ?? null,
-          data.sortOrder ?? null,
+          data.sortOrder ??
+            null,
         ]
       );
 
-    return result.rows[0] ?? null;
+    const updated =
+      result.rows[0] ?? null;
+
+    if (!updated) {
+      return null;
+    }
+
+    /**
+     * Sangat penting:
+     *
+     * Setelah word_count chapter berubah,
+     * current_word_count Book dihitung
+     * ulang dari semua chapter.
+     */
+    await syncBookWordCount(
+      bookId
+    );
+
+    return updated;
   } catch (error: any) {
     if (
       error?.code === "23505"
@@ -458,7 +536,22 @@ export async function deleteChapter(
       ]
     );
 
-  return result.rows[0] ?? null;
+  const deleted =
+    result.rows[0] ?? null;
+
+  if (!deleted) {
+    return null;
+  }
+
+  /**
+   * Kalau chapter dihapus,
+   * total kata Book juga harus turun.
+   */
+  await syncBookWordCount(
+    bookId
+  );
+
+  return deleted;
 }
 
 export async function getSnapshots(

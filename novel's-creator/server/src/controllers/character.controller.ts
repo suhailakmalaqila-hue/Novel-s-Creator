@@ -1,6 +1,6 @@
 import { Response } from "express";
 import {
-  AuthenticatedRequest,
+  AuthRequest,
 } from "../middleware/auth.middleware";
 
 import {
@@ -12,7 +12,7 @@ import {
 } from "../services/character.service";
 
 export async function listCharacters(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -28,7 +28,7 @@ export async function listCharacters(
         : undefined;
 
     const characters = await getCharacters(
-      req.user.userId,
+      req.user.id,
       bookId
     );
 
@@ -43,7 +43,7 @@ export async function listCharacters(
 }
 
 export async function getCharacter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -55,7 +55,7 @@ export async function getCharacter(
 
     const character = await getCharacterById(
       req.params.characterId,
-      req.user.userId
+      req.user.id
     );
 
     if (!character) {
@@ -75,7 +75,7 @@ export async function getCharacter(
 }
 
 export async function addCharacter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -95,7 +95,7 @@ export async function addCharacter(
     }
 
     const character = await createCharacter(
-      req.user.userId,
+      req.user.id,
       req.body
     );
 
@@ -116,7 +116,7 @@ export async function addCharacter(
 }
 
 export async function editCharacter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -128,7 +128,7 @@ export async function editCharacter(
 
     const character = await updateCharacter(
       req.params.characterId,
-      req.user.userId,
+      req.user.id,
       req.body
     );
 
@@ -155,7 +155,7 @@ export async function editCharacter(
 }
 
 export async function removeCharacter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -167,7 +167,7 @@ export async function removeCharacter(
 
     const deleted = await deleteCharacter(
       req.params.characterId,
-      req.user.userId
+      req.user.id
     );
 
     if (!deleted) {

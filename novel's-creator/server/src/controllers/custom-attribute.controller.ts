@@ -1,7 +1,7 @@
 import { Response } from "express";
 
 import {
-  AuthenticatedRequest,
+  AuthRequest,
 } from "../middleware/auth.middleware";
 
 import {
@@ -12,7 +12,7 @@ import {
 } from "../services/custom-attribute.service";
 
 export async function listCustomAttributes(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -25,7 +25,7 @@ export async function listCustomAttributes(
     const attributes =
       await getCustomAttributes(
         req.params.characterId,
-        req.user.userId
+        req.user.id
       );
 
     if (attributes === null) {
@@ -46,7 +46,7 @@ export async function listCustomAttributes(
 }
 
 export async function addCustomAttribute(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -68,7 +68,7 @@ export async function addCustomAttribute(
     const attribute =
       await createCustomAttribute(
         req.params.characterId,
-        req.user.userId,
+        req.user.id,
         req.body
       );
 
@@ -90,7 +90,7 @@ export async function addCustomAttribute(
 }
 
 export async function editCustomAttribute(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -103,7 +103,7 @@ export async function editCustomAttribute(
     const attribute =
       await updateCustomAttribute(
         req.params.attributeId,
-        req.user.userId,
+        req.user.id,
         req.body
       );
 
@@ -126,7 +126,7 @@ export async function editCustomAttribute(
 }
 
 export async function removeCustomAttribute(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -139,7 +139,7 @@ export async function removeCustomAttribute(
     const deleted =
       await deleteCustomAttribute(
         req.params.attributeId,
-        req.user.userId
+        req.user.id
       );
 
     if (!deleted) {

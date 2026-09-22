@@ -1,7 +1,7 @@
 import { Response } from "express";
 
 import {
-  AuthenticatedRequest,
+  AuthRequest,
 } from "../middleware/auth.middleware";
 
 import {
@@ -11,7 +11,7 @@ import {
 } from "../services/mention.service";
 
 export async function listMentions(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -25,7 +25,7 @@ export async function listMentions(
       await getMentions(
         req.params.bookId,
         req.params.chapterId,
-        req.user.userId
+        req.user.id
       );
 
     if (mentions === null) {
@@ -47,7 +47,7 @@ export async function listMentions(
 }
 
 export async function addMention(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -71,7 +71,7 @@ export async function addMention(
       await createMention(
         req.params.bookId,
         req.params.chapterId,
-        req.user.userId,
+        req.user.id,
         req.body
       );
 
@@ -114,7 +114,7 @@ export async function addMention(
 }
 
 export async function removeMention(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -127,7 +127,7 @@ export async function removeMention(
     const deleted =
       await deleteMention(
         req.params.mentionId,
-        req.user.userId
+        req.user.id
       );
 
     if (!deleted) {

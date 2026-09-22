@@ -1,7 +1,7 @@
 import { Response } from "express";
 
 import {
-  AuthenticatedRequest,
+  AuthRequest,
 } from "../middleware/auth.middleware";
 
 import {
@@ -10,11 +10,11 @@ import {
 } from "../services/user.service";
 
 export async function getMyProfile(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -37,22 +37,21 @@ export async function getMyProfile(
       data: user,
     });
   } catch (error) {
-    console.error(error);
+    console.error("getMyProfile error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Gagal mengambil data user",
+      message: "Gagal mengambil data user",
     });
   }
 }
 
 export async function updateMyProfile(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
 
     if (!userId) {
       return res.status(401).json({
@@ -75,17 +74,15 @@ export async function updateMyProfile(
 
     return res.json({
       success: true,
-      message:
-        "Profil berhasil diperbarui",
+      message: "Profil berhasil diperbarui",
       data: user,
     });
   } catch (error) {
-    console.error(error);
+    console.error("updateMyProfile error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Gagal memperbarui profil",
+      message: "Gagal memperbarui profil",
     });
   }
 }

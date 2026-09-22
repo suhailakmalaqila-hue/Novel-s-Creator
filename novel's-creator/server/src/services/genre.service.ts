@@ -32,8 +32,36 @@ export async function createGenre(name: string) {
 
 export async function addGenreToBook(
   bookId: string,
-  genreId: string
+  genreId: string,
+  userId: string
 ) {
+  const bookResult = await pool.query(
+    `
+    SELECT id
+    FROM books
+    WHERE id = $1
+      AND user_id = $2
+    `,
+    [bookId, userId]
+  );
+
+  if (bookResult.rows.length === 0) {
+    return null;
+  }
+
+  const genreResult = await pool.query(
+    `
+    SELECT id
+    FROM genres
+    WHERE id = $1
+    `,
+    [genreId]
+  );
+
+  if (genreResult.rows.length === 0) {
+    return null;
+  }
+
   const result = await pool.query(
     `
     INSERT INTO book_genres (
@@ -53,16 +81,20 @@ export async function addGenreToBook(
 
 export async function removeGenreFromBook(
   bookId: string,
-  genreId: string
+  genreId: string,
+  userId: string
 ) {
   const result = await pool.query(
     `
-    DELETE FROM book_genres
-    WHERE book_id = $1
-      AND genre_id = $2
-    RETURNING *
+    DELETE FROM book_genres bg
+    USING books b
+    WHERE bg.book_id = b.id
+      AND bg.book_id = $1
+      AND bg.genre_id = $2
+      AND b.user_id = $3
+    RETURNING bg.*
     `,
-    [bookId, genreId]
+    [bookId, genreId, userId]
   );
 
   return result.rows[0] ?? null;

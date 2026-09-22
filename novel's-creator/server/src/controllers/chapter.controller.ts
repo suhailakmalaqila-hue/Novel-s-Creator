@@ -1,7 +1,7 @@
 import { Response } from "express";
 
 import {
-  AuthenticatedRequest,
+  AuthRequest,
 } from "../middleware/auth.middleware";
 
 import {
@@ -16,12 +16,12 @@ import {
 } from "../services/chapter.service";
 
 export async function getChapters(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const { bookId } =
       req.params;
@@ -56,12 +56,12 @@ export async function getChapters(
 }
 
 export async function getChapter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const {
       bookId,
@@ -107,12 +107,12 @@ export async function getChapter(
 }
 
 export async function addChapter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const { bookId } =
       req.params;
@@ -185,12 +185,12 @@ export async function addChapter(
 }
 
 export async function editChapter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const {
       bookId,
@@ -251,12 +251,12 @@ export async function editChapter(
 }
 
 export async function removeChapter(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const {
       bookId,
@@ -303,12 +303,12 @@ export async function removeChapter(
 }
 
 export async function listSnapshots(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const {
       bookId,
@@ -354,12 +354,12 @@ export async function listSnapshots(
 }
 
 export async function addSnapshot(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const {
       bookId,
@@ -374,12 +374,7 @@ export async function addSnapshot(
       });
     }
 
-    const {
-      chapterTitle,
-      content,
-      wordCount,
-      reason,
-    } = req.body;
+    const { chapterTitle, content, reason } = req.body;
 
     if (
       !chapterTitle ||
@@ -392,19 +387,16 @@ export async function addSnapshot(
       });
     }
 
-    const snapshot =
-      await createSnapshot(
-        bookId,
-        chapterId,
-        userId,
-        {
-          chapterTitle,
-          content,
-          wordCount:
-            Number(wordCount) || 0,
-          reason,
-        }
-      );
+    const snapshot = await createSnapshot(
+  bookId,
+  chapterId,
+  userId,
+  {
+    chapterTitle,
+    content,
+    reason,
+  }
+);
 
     if (!snapshot) {
       return res.status(404).json({
@@ -432,12 +424,12 @@ export async function addSnapshot(
 }
 
 export async function getSnapshot(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const userId =
-      req.user?.userId;
+      req.user?.id;
 
     const {
       bookId,
