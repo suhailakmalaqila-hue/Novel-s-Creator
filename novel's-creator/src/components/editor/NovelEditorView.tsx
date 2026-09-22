@@ -63,8 +63,8 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
   const {
     loadingByBook,
     loadedBooks,
-    snapshots,
-    snapshotsLoading,
+    snapshotsByChapter,
+    snapshotsLoadingByChapter,
     refreshChapters,
     refreshSnapshots,
     addSnapshot,
@@ -154,6 +154,28 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       ) || null
     );
   }, [chaptersByBook, selectedBookId, selectedChapterId]);
+
+  /*
+   * Snapshot selalu di-scope berdasarkan:
+   * bookId + chapterId.
+   *
+   * Jangan menggunakan flattened snapshots karena itu dapat
+   * mencampurkan history antar chapter ketika user berpindah
+   * buku/chapter dengan cepat.
+   */
+  const snapshotKey = activeChapter
+    ? `${activeChapter.bookId}:${activeChapter.id}`
+    : "";
+
+  const activeSnapshots = snapshotKey
+    ? snapshotsByChapter[snapshotKey] ?? []
+    : [];
+
+  const activeSnapshotsLoading = snapshotKey
+    ? Boolean(
+        snapshotsLoadingByChapter[snapshotKey]
+      )
+    : false;
 
   /*
    * Sinkronisasi target dari App -> Editor.
@@ -1466,7 +1488,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             <History className="w-3.5 h-3.5" />
             <span>
               Draft Darurat (
-              {snapshots.length})
+              {activeSnapshots.length})
             </span>
           </button>
 
@@ -1859,13 +1881,13 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             </p>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {snapshotsLoading ? (
+              {activeSnapshotsLoading ? (
                 <div className="py-12 text-center text-[#6E6E85]">
                   <p className="text-xs animate-pulse">
                     Memuat riwayat draft...
                   </p>
                 </div>
-              ) : snapshots.length ===
+              ) : activeSnapshots.length ===
                 0 ? (
                 <div className="py-12 text-center text-[#6E6E85]">
                   <p className="text-xs">
@@ -1874,7 +1896,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
                   </p>
                 </div>
               ) : (
-                snapshots.map(
+                activeSnapshots.map(
                   (snap) => (
                     <div
                       key={snap.id}

@@ -21,7 +21,6 @@ type UpdateChapterData = {
 type CreateSnapshotData = {
   chapterTitle: string;
   content: string;
-  wordCount: number;
   reason?: string;
 };
 
@@ -324,10 +323,6 @@ export async function createChapter(
         ]
       );
 
-    /**
-     * Setelah chapter berhasil dibuat,
-     * hitung ulang total kata Book dari DB.
-     */
     await syncBookWordCount(
       bookId
     );
@@ -369,9 +364,6 @@ export async function updateChapter(
   /**
    * Word count selalu dihitung dari
    * content aktual.
-   *
-   * Frontend tidak menjadi sumber
-   * kebenaran word count.
    */
   const wordCount =
     content !== undefined
@@ -481,13 +473,6 @@ export async function updateChapter(
       return null;
     }
 
-    /**
-     * Sangat penting:
-     *
-     * Setelah word_count chapter berubah,
-     * current_word_count Book dihitung
-     * ulang dari semua chapter.
-     */
     await syncBookWordCount(
       bookId
     );
@@ -543,10 +528,6 @@ export async function deleteChapter(
     return null;
   }
 
-  /**
-   * Kalau chapter dihapus,
-   * total kata Book juga harus turun.
-   */
   await syncBookWordCount(
     bookId
   );
@@ -613,6 +594,15 @@ export async function createSnapshot(
     return null;
   }
 
+  /**
+   * Backend menjadi source of truth.
+   *
+   * Word count snapshot dihitung dari content,
+   * bukan dari nilai yang dikirim frontend.
+   */
+  const wordCount =
+    countWords(data.content);
+
   const result =
     await pool.query(
       `
@@ -645,9 +635,9 @@ export async function createSnapshot(
       [
         chapterId,
         bookId,
-        data.chapterTitle,
+        data.chapterTitle.trim(),
         data.content,
-        data.wordCount,
+        wordCount,
         data.reason ??
           null,
       ]

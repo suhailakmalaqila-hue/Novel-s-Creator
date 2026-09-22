@@ -1600,6 +1600,11 @@ function MainAppContent() {
                   0
               ),
 
+            coverUrl:
+              b.coverUrl ??
+              b.cover_url ??
+              "",
+
             genres:
               b.genres ||
               (b.genre
@@ -1852,11 +1857,17 @@ function MainAppContent() {
               50000
           );
 
+        const coverUrl =
+          (book as any).coverUrl ??
+          (book as any).cover_url ??
+          "";
+
         if (!book.id) {
           await addBook({
             title: book.title,
             synopsis:
               book.synopsis,
+            coverUrl,
             targetWordCount:
               targetWords,
             status:
@@ -1864,6 +1875,7 @@ function MainAppContent() {
               "draft",
           });
 
+          await refreshBooks();
           return;
         }
 
@@ -1873,16 +1885,20 @@ function MainAppContent() {
             title: book.title,
             synopsis:
               book.synopsis,
+            coverUrl,
             targetWordCount:
               targetWords,
             status:
               book.status,
           }
         );
+
+        await refreshBooks();
       },
       [
         editBook,
         addBook,
+        refreshBooks,
       ]
     );
 

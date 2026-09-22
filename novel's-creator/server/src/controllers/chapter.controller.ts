@@ -374,11 +374,18 @@ export async function addSnapshot(
       });
     }
 
-    const { chapterTitle, content, reason } = req.body;
+    const {
+      chapterTitle,
+      content,
+      reason,
+    } = req.body;
 
     if (
-      !chapterTitle ||
-      content === undefined
+      typeof chapterTitle !==
+        "string" ||
+      !chapterTitle.trim() ||
+      typeof content !==
+        "string"
     ) {
       return res.status(400).json({
         success: false,
@@ -387,16 +394,17 @@ export async function addSnapshot(
       });
     }
 
-    const snapshot = await createSnapshot(
-  bookId,
-  chapterId,
-  userId,
-  {
-    chapterTitle,
-    content,
-    reason,
-  }
-);
+    const snapshot =
+      await createSnapshot(
+        bookId,
+        chapterId,
+        userId,
+        {
+          chapterTitle,
+          content,
+          reason,
+        }
+      );
 
     if (!snapshot) {
       return res.status(404).json({
