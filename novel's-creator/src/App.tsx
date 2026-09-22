@@ -13,6 +13,8 @@ import {
   QuickNote,
 } from "./types";
 
+import type { User } from "./types/auth";
+
 import {
   AuthProvider,
   useAuth,
@@ -50,6 +52,10 @@ import {
   TUTORIAL_DUMMY_BOOK_ID,
   TUTORIAL_DUMMY_CHAPTER_1_ID,
 } from "./lib/tutorialDummyData";
+
+import {
+  apiRequest,
+} from "./services/api";
 
 import {
   SplashScreen,
@@ -90,6 +96,1380 @@ import {
 import {
   GlobalSearchModal,
 } from "./components/search/GlobalSearchModal";
+
+import {
+  Users,
+  UserPlus,
+  Pencil,
+  Trash2,
+  ShieldCheck,
+  UserRound,
+  RefreshCw,
+  X,
+  LogOut,
+  Mail,
+  Lock,
+  UserPen,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
+
+/* =========================================================
+ * ADMIN TYPES
+ * ========================================================= */
+
+type AdminUser = {
+  id: string;
+  email: string;
+  role: "admin" | "user";
+  author_name: string | null;
+  pen_name: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type AdminUserForm = {
+  email: string;
+  password: string;
+  authorName: string;
+  penName: string;
+  role: "admin" | "user";
+};
+
+const EMPTY_ADMIN_USER_FORM: AdminUserForm = {
+  email: "",
+  password: "",
+  authorName: "",
+  penName: "",
+  role: "user",
+};
+
+/* =========================================================
+ * ADMIN DASHBOARD
+ * =========================================================
+ *
+ * Frontend Stage 2:
+ *
+ * - GET    /api/admin/users
+ * - POST   /api/admin/users
+ * - PATCH  /api/admin/users/:userId
+ * - DELETE /api/admin/users/:userId
+ *
+ * Backend tetap menjadi security boundary karena seluruh
+ * endpoint /api/admin/* sudah dilindungi authMiddleware +
+ * requireRole("admin").
+ * ========================================================= */
+
+interface AdminDashboardViewProps {
+  currentUser: User;
+  onLogout: () => void;
+}
+
+function AdminDashboardView({
+  currentUser,
+  onLogout,
+}: AdminDashboardViewProps) {
+  const [
+    users,
+    setUsers,
+  ] = useState<AdminUser[]>([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    submitting,
+    setSubmitting,
+  ] = useState(false);
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState<string | null>(null);
+
+  const [
+    successMessage,
+    setSuccessMessage,
+  ] = useState<string | null>(null);
+
+  const [
+    isModalOpen,
+    setIsModalOpen,
+  ] = useState(false);
+
+  const [
+    editingUser,
+    setEditingUser,
+  ] = useState<AdminUser | null>(null);
+
+  const [
+    form,
+    setForm,
+  ] = useState<AdminUserForm>(
+    EMPTY_ADMIN_USER_FORM
+  );
+
+  const [
+    searchQuery,
+    setSearchQuery,
+  ] = useState("");
+
+  /**
+   * Load seluruh user.
+   */
+  const loadUsers = useCallback(
+    async () => {
+      setLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const response =
+          await apiRequest<{
+            success: boolean;
+            data: AdminUser[];
+          }>("/admin/users");
+
+        setUsers(
+          Array.isArray(response.data)
+            ? response.data
+            : []
+        );
+      } catch (error) {
+        console.error(
+          "Gagal mengambil data user admin:",
+          error
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Gagal mengambil data user."
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
+
+  /**
+   * Buka modal Create.
+   */
+  const handleOpenCreate = useCallback(
+    () => {
+      setEditingUser(null);
+
+      setForm(
+        EMPTY_ADMIN_USER_FORM
+      );
+
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      setIsModalOpen(true);
+    },
+    []
+  );
+
+  /**
+   * Buka modal Edit.
+   */
+  const handleOpenEdit = useCallback(
+    (targetUser: AdminUser) => {
+      setEditingUser(targetUser);
+
+      setForm({
+        email:
+          targetUser.email ?? "",
+
+        password: "",
+
+        authorName:
+          targetUser.author_name ?? "",
+
+        penName:
+          targetUser.pen_name ?? "",
+
+        role:
+          targetUser.role,
+      });
+
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      setIsModalOpen(true);
+    },
+    []
+  );
+
+  /**
+   * Tutup modal.
+   */
+  const handleCloseModal =
+    useCallback(() => {
+      if (submitting) {
+        return;
+      }
+
+      setIsModalOpen(false);
+      setEditingUser(null);
+
+      setForm(
+        EMPTY_ADMIN_USER_FORM
+      );
+    }, [submitting]);
+
+  /**
+   * Update form.
+   */
+  const handleFormChange = useCallback(
+    (
+      field: keyof AdminUserForm,
+      value: string
+    ) => {
+      setForm((previous) => ({
+        ...previous,
+        [field]: value,
+      }));
+    },
+    []
+  );
+
+  /**
+   * Submit Create / Edit.
+   */
+  const handleSubmit =
+    useCallback(
+      async (
+        event: React.FormEvent
+      ) => {
+        event.preventDefault();
+
+        setErrorMessage(null);
+        setSuccessMessage(null);
+
+        const email =
+          form.email.trim();
+
+        const authorName =
+          form.authorName.trim();
+
+        const penName =
+          form.penName.trim();
+
+        if (!email) {
+          setErrorMessage(
+            "Email wajib diisi."
+          );
+          return;
+        }
+
+        if (
+          !editingUser &&
+          !form.password.trim()
+        ) {
+          setErrorMessage(
+            "Password wajib diisi untuk user baru."
+          );
+          return;
+        }
+
+        setSubmitting(true);
+
+        try {
+          if (editingUser) {
+            const payload: {
+              email: string;
+              authorName?: string;
+              penName?: string;
+              role: "admin" | "user";
+              password?: string;
+            } = {
+              email,
+              authorName:
+                authorName || undefined,
+              penName:
+                penName || undefined,
+              role: form.role,
+            };
+
+            /**
+             * Password kosong ketika edit berarti
+             * password lama dipertahankan.
+             */
+            if (
+              form.password.trim()
+            ) {
+              payload.password =
+                form.password.trim();
+            }
+
+            const response =
+              await apiRequest<{
+                success: boolean;
+                message?: string;
+                data: AdminUser;
+              }>(
+                `/admin/users/${editingUser.id}`,
+                {
+                  method: "PATCH",
+                  body: JSON.stringify(
+                    payload
+                  ),
+                }
+              );
+
+            /**
+             * Update lokal jika response memiliki
+             * user hasil update.
+             */
+            if (response.data) {
+              setUsers(
+                (previous) =>
+                  previous.map(
+                    (item) =>
+                      item.id ===
+                      editingUser.id
+                        ? response.data
+                        : item
+                  )
+              );
+            } else {
+              await loadUsers();
+            }
+
+            setSuccessMessage(
+              response.message ||
+                "User berhasil diperbarui."
+            );
+          } else {
+            const response =
+              await apiRequest<{
+                success: boolean;
+                message?: string;
+                data: AdminUser;
+              }>(
+                "/admin/users",
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    email,
+                    password:
+                      form.password.trim(),
+                    authorName:
+                      authorName ||
+                      undefined,
+                    penName:
+                      penName ||
+                      undefined,
+                    role: form.role,
+                  }),
+                }
+              );
+
+            if (response.data) {
+              setUsers(
+                (previous) => [
+                  response.data,
+                  ...previous,
+                ]
+              );
+            } else {
+              await loadUsers();
+            }
+
+            setSuccessMessage(
+              response.message ||
+                "User berhasil dibuat."
+            );
+          }
+
+          setIsModalOpen(false);
+          setEditingUser(null);
+
+          setForm(
+            EMPTY_ADMIN_USER_FORM
+          );
+
+          /**
+           * Refresh dari backend setelah mutation
+           * agar source of truth tetap PostgreSQL.
+           */
+          await loadUsers();
+        } catch (error) {
+          console.error(
+            "Gagal menyimpan user admin:",
+            error
+          );
+
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Gagal menyimpan user."
+          );
+        } finally {
+          setSubmitting(false);
+        }
+      },
+      [
+        editingUser,
+        form,
+        loadUsers,
+      ]
+    );
+
+  /**
+   * Delete user.
+   */
+  const handleDelete =
+    useCallback(
+      async (
+        targetUser: AdminUser
+      ) => {
+        /**
+         * Self-delete dicegah di frontend.
+         *
+         * Backend tetap melakukan validasi
+         * CANNOT_DELETE_SELF.
+         */
+        if (
+          targetUser.id ===
+          currentUser.id
+        ) {
+          setErrorMessage(
+            "Admin tidak dapat menghapus akun sendiri."
+          );
+
+          return;
+        }
+
+        const confirmed =
+          window.confirm(
+            `Hapus user ${targetUser.email}? Tindakan ini tidak dapat dibatalkan.`
+          );
+
+        if (!confirmed) {
+          return;
+        }
+
+        setErrorMessage(null);
+        setSuccessMessage(null);
+        setSubmitting(true);
+
+        try {
+          const response =
+            await apiRequest<{
+              success: boolean;
+              message?: string;
+            }>(
+              `/admin/users/${targetUser.id}`,
+              {
+                method: "DELETE",
+              }
+            );
+
+          setUsers(
+            (previous) =>
+              previous.filter(
+                (item) =>
+                  item.id !==
+                  targetUser.id
+              )
+          );
+
+          setSuccessMessage(
+            response.message ||
+              "User berhasil dihapus."
+          );
+
+          /**
+           * Refresh dari backend untuk memastikan
+           * tabel benar-benar sesuai database.
+           */
+          await loadUsers();
+        } catch (error) {
+          console.error(
+            "Gagal menghapus user:",
+            error
+          );
+
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Gagal menghapus user."
+          );
+        } finally {
+          setSubmitting(false);
+        }
+      },
+      [
+        currentUser.id,
+        loadUsers,
+      ]
+    );
+
+  /**
+   * Search hanya di frontend.
+   *
+   * Tidak mengubah endpoint backend.
+   */
+  const filteredUsers =
+    useMemo(() => {
+      const query =
+        searchQuery
+          .trim()
+          .toLowerCase();
+
+      if (!query) {
+        return users;
+      }
+
+      return users.filter(
+        (item) => {
+          const email =
+            item.email
+              ?.toLowerCase() ??
+            "";
+
+          const authorName =
+            item.author_name
+              ?.toLowerCase() ??
+            "";
+
+          const penName =
+            item.pen_name
+              ?.toLowerCase() ??
+            "";
+
+          const role =
+            item.role
+              ?.toLowerCase() ??
+            "";
+
+          return (
+            email.includes(query) ||
+            authorName.includes(
+              query
+            ) ||
+            penName.includes(
+              query
+            ) ||
+            role.includes(query)
+          );
+        }
+      );
+    }, [
+      users,
+      searchQuery,
+    ]);
+
+  const adminCount =
+    users.filter(
+      (item) =>
+        item.role === "admin"
+    ).length;
+
+  const userCount =
+    users.filter(
+      (item) =>
+        item.role === "user"
+    ).length;
+
+  const formatDate =
+    (value?: string) => {
+      if (!value) {
+        return "-";
+      }
+
+      const date =
+        new Date(value);
+
+      if (
+        Number.isNaN(
+          date.getTime()
+        )
+      ) {
+        return value;
+      }
+
+      return date.toLocaleDateString(
+        "id-ID",
+        {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }
+      );
+    };
+
+  return (
+    <div className="min-h-screen bg-[#121212] text-[#E0E0E0] flex flex-col">
+      {/* =====================================================
+          ADMIN HEADER
+          ===================================================== */}
+
+      <header className="border-b border-[#2A2A3C] bg-[#1E1E2E] shrink-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="h-16 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-[#D4AF37]" />
+              </div>
+
+              <div className="min-w-0">
+                <h1 className="font-editorial text-lg sm:text-xl font-bold text-[#FAF7EE] truncate">
+                  Novel's Creator
+                </h1>
+
+                <p className="text-[10px] sm:text-xs uppercase tracking-[0.16em] text-[#8A8A9E] truncate">
+                  Admin Dashboard
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-[#151522] border border-[#2A2A3C]">
+                <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
+
+                <span className="text-xs text-[#C8C8DC]">
+                  {currentUser.email}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={onLogout}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#3A3A50] bg-[#171724] hover:bg-[#242438] hover:border-[#D4AF37]/40 text-xs text-[#D8D8E8] transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+
+                <span className="hidden sm:inline">
+                  Keluar
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* =====================================================
+          ADMIN CONTENT
+          ===================================================== */}
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Page heading */}
+
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-[#D4AF37] mb-2">
+              System Administration
+            </p>
+
+            <h2 className="font-editorial text-2xl sm:text-3xl font-bold text-[#FAF7EE]">
+              User Management
+            </h2>
+
+            <p className="text-sm text-[#8A8A9E] mt-2 max-w-2xl">
+              Kelola akun pengguna Novel's Creator,
+              role, dan akses akun dari satu tempat.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSuccessMessage(null);
+                setErrorMessage(null);
+                void loadUsers();
+              }}
+              disabled={
+                loading ||
+                submitting
+              }
+              className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-[#303046] bg-[#171724] hover:bg-[#222234] hover:border-[#D4AF37]/40 disabled:opacity-50 disabled:cursor-not-allowed text-xs text-[#D8D8E8] transition-colors"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${
+                  loading
+                    ? "animate-spin"
+                    : ""
+                }`}
+              />
+
+              <span>
+                Refresh
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              disabled={submitting}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#E2BE4B] disabled:opacity-50 disabled:cursor-not-allowed text-[#121212] text-xs font-bold transition-colors"
+            >
+              <UserPlus className="w-4 h-4" />
+
+              <span>
+                Tambah User
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* ===================================================
+            SUMMARY
+            =================================================== */}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <div className="rounded-2xl border border-[#2A2A3C] bg-[#1E1E2E] p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#85859A]">
+                  Total User
+                </p>
+
+                <p className="text-2xl font-bold text-[#FAF7EE] mt-1">
+                  {users.length}
+                </p>
+              </div>
+
+              <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center">
+                <Users className="w-5 h-5 text-[#D4AF37]" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#2A2A3C] bg-[#1E1E2E] p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#85859A]">
+                  Admin
+                </p>
+
+                <p className="text-2xl font-bold text-[#FAF7EE] mt-1">
+                  {adminCount}
+                </p>
+              </div>
+
+              <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-[#D4AF37]" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#2A2A3C] bg-[#1E1E2E] p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#85859A]">
+                  Writer User
+                </p>
+
+                <p className="text-2xl font-bold text-[#FAF7EE] mt-1">
+                  {userCount}
+                </p>
+              </div>
+
+              <div className="w-10 h-10 rounded-xl bg-[#171724] border border-[#303046] flex items-center justify-center">
+                <UserRound className="w-5 h-5 text-[#8A8A9E]" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ===================================================
+            ALERTS
+            =================================================== */}
+
+        {errorMessage && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-900/70 bg-red-950/40 px-4 py-3">
+            <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+
+            <div className="text-xs text-red-300 flex-1">
+              {errorMessage}
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setErrorMessage(null)
+              }
+              className="text-red-400 hover:text-red-200"
+              aria-label="Tutup pesan error"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-emerald-900/70 bg-emerald-950/40 px-4 py-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+
+            <div className="text-xs text-emerald-300 flex-1">
+              {successMessage}
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSuccessMessage(null)
+              }
+              className="text-emerald-400 hover:text-emerald-200"
+              aria-label="Tutup pesan sukses"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* ===================================================
+            USER TABLE CARD
+            =================================================== */}
+
+        <section className="rounded-2xl border border-[#2A2A3C] bg-[#1E1E2E] overflow-hidden">
+          <div className="px-4 sm:px-5 py-4 border-b border-[#2A2A3C] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[#FAF7EE]">
+                Daftar Pengguna
+              </h3>
+
+              <p className="text-[11px] text-[#77778C] mt-1">
+                {filteredUsers.length} user ditampilkan
+              </p>
+            </div>
+
+            <div className="w-full sm:w-72">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) =>
+                  setSearchQuery(
+                    event.target.value
+                  )
+                }
+                placeholder="Cari email, nama, role..."
+                className="w-full px-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs text-[#E0E0E0] placeholder-[#606075]"
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="min-h-[240px] flex items-center justify-center">
+              <div className="flex items-center gap-3 text-sm text-[#8A8A9E]">
+                <RefreshCw className="w-4 h-4 animate-spin text-[#D4AF37]" />
+
+                <span>
+                  Memuat data user...
+                </span>
+              </div>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="min-h-[240px] flex flex-col items-center justify-center text-center px-6">
+              <Users className="w-10 h-10 text-[#45455A] mb-3" />
+
+              <p className="text-sm text-[#C8C8DC]">
+                Tidak ada user ditemukan.
+              </p>
+
+              <p className="text-xs text-[#6E6E82] mt-1">
+                Coba ubah kata pencarian atau
+                tambahkan user baru.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px]">
+                <thead>
+                  <tr className="border-b border-[#2A2A3C] bg-[#191925]">
+                    <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[#77778C] font-bold">
+                      User
+                    </th>
+
+                    <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[#77778C] font-bold">
+                      Nama Penulis
+                    </th>
+
+                    <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[#77778C] font-bold">
+                      Role
+                    </th>
+
+                    <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[#77778C] font-bold">
+                      Dibuat
+                    </th>
+
+                    <th className="text-right px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[#77778C] font-bold">
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredUsers.map(
+                    (item) => {
+                      const isCurrentUser =
+                        item.id ===
+                        currentUser.id;
+
+                      return (
+                        <tr
+                          key={item.id}
+                          className="border-b border-[#242437] last:border-b-0 hover:bg-[#222234]/50 transition-colors"
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-[#171724] border border-[#34344A] flex items-center justify-center shrink-0">
+                                {item.role ===
+                                "admin" ? (
+                                  <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
+                                ) : (
+                                  <UserRound className="w-4 h-4 text-[#8A8A9E]" />
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-medium text-[#E0E0E0] truncate">
+                                    {item.email}
+                                  </p>
+
+                                  {isCurrentUser && (
+                                    <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20 shrink-0">
+                                      Anda
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="text-[10px] text-[#626278] mt-0.5">
+                                  ID:{" "}
+                                  {item.id}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div>
+                              <p className="text-xs text-[#C8C8DC]">
+                                {item.author_name ||
+                                  "-"}
+                              </p>
+
+                              <p className="text-[10px] text-[#77778C] mt-0.5">
+                                {item.pen_name ||
+                                  "-"}
+                              </p>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            {item.role ===
+                            "admin" ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/25 text-[10px] font-semibold text-[#D4AF37]">
+                                <ShieldCheck className="w-3 h-3" />
+                                Admin
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#171724] border border-[#303046] text-[10px] font-semibold text-[#A2A2B6]">
+                                <UserRound className="w-3 h-3" />
+                                User
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4 text-xs text-[#8A8A9E]">
+                            {formatDate(
+                              item.created_at
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenEdit(
+                                    item
+                                  )
+                                }
+                                disabled={
+                                  submitting
+                                }
+                                className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[#303046] bg-[#171724] hover:bg-[#25253A] hover:border-[#D4AF37]/40 text-[#BDBDCE] hover:text-[#FAF7EE] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                title="Edit user"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleDelete(
+                                    item
+                                  )
+                                }
+                                disabled={
+                                  submitting ||
+                                  isCurrentUser
+                                }
+                                className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[#3A3038] bg-[#21171C] hover:bg-red-950/60 hover:border-red-800 text-red-400 hover:text-red-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                title={
+                                  isCurrentUser
+                                    ? "Tidak dapat menghapus akun sendiri"
+                                    : "Hapus user"
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </main>
+
+      {/* =====================================================
+          FOOTER
+          ===================================================== */}
+
+      <footer className="h-10 bg-[#1E1E2E] border-t border-[#2A2A3C] flex items-center justify-between px-4 sm:px-8 text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-[#D4AF37]">
+            Admin: Sistem Aktif
+          </span>
+
+          <span className="hidden sm:inline text-white/20">
+            •
+          </span>
+
+          <span className="hidden sm:inline">
+            Users: {users.length}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3 font-mono">
+          <span className="hidden sm:inline text-white/40">
+            REST API & PostgreSQL
+          </span>
+
+          <span className="hidden sm:inline text-white/20">
+            •
+          </span>
+
+          <span className="text-[#D4AF37]/80">
+            V 1.0.0 Stable
+          </span>
+        </div>
+      </footer>
+
+      {/* =====================================================
+          CREATE / EDIT MODAL
+          ===================================================== */}
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-[#1E1E2E] border border-[#303046] rounded-2xl shadow-2xl overflow-hidden">
+            {/* Modal header */}
+
+            <div className="px-5 py-4 border-b border-[#2A2A3C] flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-[#FAF7EE]">
+                  {editingUser
+                    ? "Edit User"
+                    : "Tambah User"}
+                </h3>
+
+                <p className="text-[11px] text-[#77778C] mt-1">
+                  {editingUser
+                    ? "Perbarui informasi dan role user."
+                    : "Buat akun user dari panel admin."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  handleCloseModal
+                }
+                disabled={submitting}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#8A8A9E] hover:text-[#FAF7EE] hover:bg-[#29293B] disabled:opacity-50"
+                aria-label="Tutup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal form */}
+
+            <form
+              onSubmit={
+                handleSubmit
+              }
+              className="p-5 space-y-4"
+            >
+              {/* Email */}
+
+              <div>
+                <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
+                  Email
+                </label>
+
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#66667B]" />
+
+                  <input
+                    type="email"
+                    value={
+                      form.email
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      handleFormChange(
+                        "email",
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                    placeholder="user@novel.id"
+                    disabled={
+                      submitting
+                    }
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] placeholder-[#606075] disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+
+              <div>
+                <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
+                  Password
+                  {editingUser && (
+                    <span className="text-[#68687D] font-normal ml-1">
+                      (kosongkan jika tidak diubah)
+                    </span>
+                  )}
+                </label>
+
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#66667B]" />
+
+                  <input
+                    type="password"
+                    value={
+                      form.password
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      handleFormChange(
+                        "password",
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                    placeholder="••••••••"
+                    disabled={
+                      submitting
+                    }
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] placeholder-[#606075] disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              {/* Author / Pen name */}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
+                    Nama Penulis
+                  </label>
+
+                  <div className="relative">
+                    <UserPen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#66667B]" />
+
+                    <input
+                      type="text"
+                      value={
+                        form.authorName
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        handleFormChange(
+                          "authorName",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                      placeholder="Nama Penulis"
+                      disabled={
+                        submitting
+                      }
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] placeholder-[#606075] disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
+                    Nama Pena
+                  </label>
+
+                  <div className="relative">
+                    <UserRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#66667B]" />
+
+                    <input
+                      type="text"
+                      value={
+                        form.penName
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        handleFormChange(
+                          "penName",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                      placeholder="Nama Pena"
+                      disabled={
+                        submitting
+                      }
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] placeholder-[#606075] disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Role */}
+
+              <div>
+                <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
+                  Role
+                </label>
+
+                <select
+                  value={
+                    form.role
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    handleFormChange(
+                      "role",
+                      event
+                        .target
+                        .value as
+                        | "admin"
+                        | "user"
+                    )
+                  }
+                  disabled={
+                    submitting ||
+                    (
+                      !!editingUser &&
+                      editingUser.id ===
+                        currentUser.id
+                    )
+                  }
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] disabled:opacity-50"
+                >
+                  <option value="user">
+                    User / Writer
+                  </option>
+
+                  <option value="admin">
+                    Admin
+                  </option>
+                </select>
+
+                {editingUser &&
+                  editingUser.id ===
+                    currentUser.id && (
+                    <p className="text-[10px] text-[#77778C] mt-1.5">
+                      Role akun admin yang sedang
+                      digunakan tidak dapat
+                      diturunkan melalui UI.
+                    </p>
+                  )}
+              </div>
+
+              {/* Form actions */}
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={
+                    handleCloseModal
+                  }
+                  disabled={
+                    submitting
+                  }
+                  className="px-4 py-2.5 rounded-xl border border-[#303046] bg-[#171724] hover:bg-[#25253A] text-xs text-[#C8C8DC] disabled:opacity-50 transition-colors"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    submitting
+                  }
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#E2BE4B] disabled:opacity-50 disabled:cursor-not-allowed text-[#121212] text-xs font-bold transition-colors"
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+
+                      <span>
+                        Menyimpan...
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {editingUser ? (
+                        <Pencil className="w-4 h-4" />
+                      ) : (
+                        <UserPlus className="w-4 h-4" />
+                      )}
+
+                      <span>
+                        {editingUser
+                          ? "Simpan Perubahan"
+                          : "Buat User"}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+ * MAIN APP CONTENT
+ * ========================================================= */
 
 function MainAppContent() {
   const {
@@ -262,24 +1642,6 @@ function MainAppContent() {
    * =========================================================
    * LOAD SEMUA CHAPTER SEMUA BOOK
    * =========================================================
-   *
-   * Sebelumnya hanya Book aktif/pertama yang dimuat.
-   *
-   * Akibatnya:
-   *
-   * Workspace baru masuk:
-   *   chapters = []
-   *   total bab = 0
-   *
-   * Setelah user membuka Book:
-   *   refreshChapters(bookId)
-   *   chapters menjadi terisi
-   *
-   * Sekarang semua Book yang sudah ada
-   * dimuat paralel setelah daftar Book tersedia.
-   *
-   * Ini membuat total bab di Workspace
-   * langsung berasal dari seluruh Book.
    */
   useEffect(() => {
     if (!isAuthenticated) {
@@ -323,6 +1685,14 @@ function MainAppContent() {
 
   /**
    * Setelah login.
+   *
+   * Tidak perlu memaksa currentView ke workspace.
+   *
+   * User admin akan otomatis dirender sebagai
+   * AdminDashboardView berdasarkan role pada
+   * AuthContext.
+   *
+   * User biasa tetap masuk Workspace.
    */
   const handleAuthSuccess =
     useCallback(() => {
@@ -404,6 +1774,17 @@ function MainAppContent() {
       setTargetBookId(null);
       setTargetChapterId(null);
 
+      setIsTutorialOpen(false);
+      setIsProfileSettingsOpen(
+        false
+      );
+      setIsSearchOpen(false);
+      setIsQuickNotesOpen(false);
+
+      setCurrentView(
+        "workspace"
+      );
+
       setAppStage("auth");
     }, [
       logout,
@@ -471,12 +1852,6 @@ function MainAppContent() {
               50000
           );
 
-        /**
-         * Book baru harus TIDAK memiliki ID.
-         *
-         * BookModal yang sudah diperbaiki
-         * sekarang tidak boleh membuat fake ID.
-         */
         if (!book.id) {
           await addBook({
             title: book.title,
@@ -526,10 +1901,6 @@ function MainAppContent() {
             bookId
           );
 
-          /**
-           * Hapus cache chapter
-           * hanya milik Book tersebut.
-           */
           clearChapters(
             bookId
           );
@@ -563,20 +1934,6 @@ function MainAppContent() {
    * =========================================================
    * SAVE CHAPTER
    * =========================================================
-   *
-   * Setelah backend menyimpan chapter:
-   *
-   * Chapter:
-   *   word_count = hasil countWords(content)
-   *
-   * lalu backend:
-   *   books.current_word_count =
-   *   SUM(chapters.word_count)
-   *
-   * Setelah itu frontend:
-   *   refreshBooks()
-   *
-   * Jadi progress berasal dari PostgreSQL.
    */
   const handleSaveChapter =
     useCallback(
@@ -646,22 +2003,16 @@ function MainAppContent() {
           }
 
           /**
-           * Backend sekarang sudah memperbarui:
+           * Backend sudah memperbarui:
            *
            * books.current_word_count
            *
            * berdasarkan SUM(chapters.word_count).
-           *
-           * Ambil ulang Book dari PostgreSQL
-           * agar Workspace menggunakan nilai
-           * source of truth terbaru.
            */
           await refreshBooks();
 
           /**
-           * Refresh chapter Book tersebut
-           * supaya cache chapter juga sama
-           * dengan DB.
+           * Sinkronkan cache chapter.
            */
           await refreshChapters(
             bookId
@@ -720,17 +2071,8 @@ function MainAppContent() {
             chapterId
           );
 
-          /**
-           * Backend sudah menghitung ulang
-           * books.current_word_count setelah
-           * chapter dihapus.
-           */
           await refreshBooks();
 
-          /**
-           * Pastikan cache Book tetap
-           * sinkron dengan DB.
-           */
           await refreshChapters(
             targetBookId
           );
@@ -1178,8 +2520,11 @@ function MainAppContent() {
   ]);
 
   /**
-   * Splash.
+   * =========================================================
+   * SPLASH
+   * =========================================================
    */
+
   if (
     appStage ===
     "splash"
@@ -1194,8 +2539,11 @@ function MainAppContent() {
   }
 
   /**
-   * Authentication.
+   * =========================================================
+   * AUTHENTICATION
+   * =========================================================
    */
+
   if (
     appStage === "auth" ||
     !isAuthenticated
@@ -1212,8 +2560,45 @@ function MainAppContent() {
   }
 
   /**
-   * Main Application.
+   * =========================================================
+   * ROLE-BASED APPLICATION ENTRY
+   * =========================================================
+   *
+   * Ini adalah bagian penting Stage 2.
+   *
+   * role = admin
+   *     -> AdminDashboardView
+   *
+   * role = user
+   *     -> Writer Workspace
+   *
+   * Security tetap berada di backend.
+   * Frontend hanya menentukan UI yang ditampilkan.
+   * =========================================================
    */
+
+  if (
+    user?.role ===
+    "admin"
+  ) {
+    return (
+      <AdminDashboardView
+        currentUser={
+          user
+        }
+        onLogout={
+          handleLogout
+        }
+      />
+    );
+  }
+
+  /**
+   * =========================================================
+   * MAIN WRITER APPLICATION
+   * =========================================================
+   */
+
   return (
     <div className="min-h-screen bg-[#121212] text-[#E0E0E0] flex flex-col font-sans selection:bg-[#D4AF37]/25 selection:text-[#FAF7EE]">
       <Navbar
@@ -1586,6 +2971,10 @@ function MainAppContent() {
     </div>
   );
 }
+
+/* =========================================================
+ * APP PROVIDERS
+ * ========================================================= */
 
 export default function App() {
   return (
