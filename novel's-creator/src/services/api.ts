@@ -59,29 +59,32 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     /*
-     * Jangan langsung menghapus token untuk semua response 401.
+     * 401 hanya digunakan untuk masalah autentikasi/session,
+     * misalnya:
+     * - token tidak valid
+     * - token expired
+     * - token tidak dapat diverifikasi
+     * - endpoint protected dipanggil tanpa autentikasi
      *
-     * Endpoint seperti:
-     * PATCH /users/me/password
-     *
-     * dapat mengembalikan 401 karena currentPassword salah,
-     * bukan karena JWT/session sudah tidak valid.
-     *
-     * Kalau token langsung dihapus di sini, percobaan password
-     * berikutnya akan berubah menjadi "Authentication required".
+     * Jika response 401, session lokal dibersihkan agar
+     * aplikasi tidak terus menggunakan token yang sudah tidak valid.
      */
-
-    const isPasswordChangeRequest =
-      endpoint === "/users/me/password";
-
-    if (
-      response.status === 401 &&
-      !isPasswordChangeRequest
-    ) {
+    if (response.status === 401) {
       clearToken();
       localStorage.removeItem("auth_user");
     }
 
+    /*
+     * Error 400, 403, 404, 409, 500, dan status lainnya
+     * tidak menghapus token.
+     *
+     * Contohnya:
+     * - 400: password saat ini salah
+     * - 403: user tidak memiliki hak akses
+     * - 404: resource tidak ditemukan
+     * - 409: konflik data
+     * - 500: kesalahan server
+     */
     throw new Error(
       result?.message ||
         "Terjadi kesalahan pada server"

@@ -153,11 +153,19 @@ export async function changeMyPassword(
       message: "Kata sandi berhasil diperbarui",
     });
   } catch (error) {
+    /*
+     * JWT sudah diverifikasi oleh authMiddleware sebelum
+     * controller ini dijalankan.
+     *
+     * Karena itu, current password yang salah adalah
+     * kesalahan input/business validation, bukan masalah
+     * autentikasi session.
+     */
     if (
       error instanceof Error &&
       error.message === "INVALID_CURRENT_PASSWORD"
     ) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         message: "Kata sandi saat ini salah",
       });
