@@ -2,6 +2,8 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -35,6 +37,8 @@ import {
   updateMention,
   deleteMention,
 } from "../services/character.service";
+
+import { useAuth } from "./AuthContext";
 
 interface CharacterContextValue {
   characters: CharacterWiki[];
@@ -126,6 +130,11 @@ const CharacterContext =
 export const CharacterProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
+  const {
+    user,
+    isAuthenticated,
+  } = useAuth();
+
   const [characters, setCharacters] =
     useState<CharacterWiki[]>([]);
 
@@ -138,49 +147,289 @@ export const CharacterProvider: React.FC<{
   const [mentions, setMentions] =
     useState<CharacterMention[]>([]);
 
+  /**
+   * =========================================================
+   * REQUEST VERSION
+   * =========================================================
+   *
+   * Setiap perubahan user membuat request sebelumnya
+   * tidak lagi valid.
+   *
+   * IMPORTANT:
+   * Request version hanya dinaikkan ketika memang
+   * ada perubahan identity atau ketika refresh baru dimulai.
+   */
+  const characterRequestIdRef =
+    useRef(0);
+
+  /**
+   * Identity user yang sedang aktif.
+   *
+   * Kita simpan di ref agar callback async dapat
+   * memeriksa bahwa response masih milik user yang benar.
+   */
+  const activeUserIdRef =
+    useRef<string | null>(null);
+
+  /**
+   * =========================================================
+   * RESET KETIKA IDENTITY USER BERUBAH
+   * =========================================================
+   *
+   * Effect ini HANYA:
+   *
+   * - membatalkan request lama
+   * - membersihkan data user sebelumnya
+   * - membersihkan error
+   *
+   * Effect ini TIDAK memanggil refreshCharacters().
+   *
+   * Loading karakter dilakukan oleh effect khusus di bawah.
+   */
+  useEffect(() => {
+    const nextUserId =
+      isAuthenticated && user?.id
+        ? user.id
+        : null;
+
+    const previousUserId =
+      activeUserIdRef.current;
+
+    /**
+     * Tidak melakukan reset jika identity
+     * sebenarnya masih sama.
+     */
+    if (
+      previousUserId ===
+      nextUserId
+    ) {
+      return;
+    }
+
+    /**
+     * Tandai identity baru.
+     */
+    activeUserIdRef.current =
+      nextUserId;
+
+    /**
+     * Invalidasi semua request sebelumnya.
+     */
+    characterRequestIdRef.current += 1;
+
+    /**
+     * Jangan pernah membawa data character
+     * user sebelumnya ke user baru.
+     */
+    setCharacters([]);
+
+    setMentions([]);
+
+    setError(null);
+
+    if (!nextUserId) {
+      setLoading(false);
+    }
+  }, [
+    isAuthenticated,
+    user?.id,
+  ]);
+
+  /**
+   * =========================================================
+   * REFRESH CHARACTERS
+   * =========================================================
+   */
   const refreshCharacters =
-    useCallback(async (bookId?: string) => {
-      try {
-        setLoading(true);
-        setError(null);
+    useCallback(
+      async (bookId?: string) => {
+        const currentUserId =
+          activeUserIdRef.current;
 
-        const data =
-          await getCharacters(bookId);
+        /**
+         * Jangan request jika belum ada user aktif.
+         */
+        if (
+          !isAuthenticated ||
+          !user?.id ||
+          !currentUserId
+        ) {
+          setCharacters([]);
+          setLoading(false);
+          return;
+        }
 
-        setCharacters(data);
-      } catch (err: any) {
-        console.error(
-          "Gagal mengambil characters:",
-          err
-        );
+        /**
+         * Pastikan ref identity masih sama
+         * dengan AuthContext.
+         */
+        if (
+          currentUserId !==
+          user.id
+        ) {
+          return;
+        }
 
-        setError(
-          err?.message ??
-            "Gagal mengambil characters"
-        );
+        /**
+         * Request baru membatalkan request lama.
+         */
+        const requestId =
+          ++characterRequestIdRef.current;
 
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    }, []);
+        try {
+          setLoading(true);
+          setError(null);
 
+          const data =
+            await getCharacters(bookId);
+
+          /**
+           * Jangan biarkan response request lama
+           * menimpa state.
+           */
+          if (
+            requestId !==
+            characterRequestIdRef.current
+          ) {
+            return;
+          }
+
+          /**
+           * Jangan memasukkan response jika
+           * user sudah berganti ketika request berjalan.
+           */
+          if (
+            activeUserIdRef.current !==
+            user.id
+          ) {
+            return;
+          }
+
+          setCharacters(
+            Array.isArray(data)
+              ? data
+              : []
+          );
+        } catch (err: any) {
+          /**
+           * Request lama tidak boleh mengubah error
+           * user yang sekarang.
+           */
+          if (
+            requestId !==
+            characterRequestIdRef.current
+          ) {
+            return;
+          }
+
+          if (
+            activeUserIdRef.current !==
+            user.id
+          ) {
+            return;
+          }
+
+          console.error(
+            "Gagal mengambil characters:",
+            err
+          );
+
+          setError(
+            err?.message ??
+              "Gagal mengambil characters"
+          );
+
+          setCharacters([]);
+
+          throw err;
+        } finally {
+          if (
+            requestId ===
+            characterRequestIdRef.current
+          ) {
+            setLoading(false);
+          }
+        }
+      },
+      [
+        isAuthenticated,
+        user?.id,
+      ]
+    );
+
+  /**
+   * =========================================================
+   * INITIAL LOAD / USER CHANGE
+   * =========================================================
+   *
+   * CharacterContext sendiri yang melakukan
+   * initial character loading.
+   *
+   * Dengan demikian App.tsx tidak perlu lagi
+   * memanggil refreshCharacters() saat user berubah.
+   */
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      !user?.id
+    ) {
+      return;
+    }
+
+    /**
+     * Identity ref sudah diset oleh effect
+     * reset di atas.
+     *
+     * Jalankan request hanya dari sini.
+     */
+    void refreshCharacters();
+  }, [
+    isAuthenticated,
+    user?.id,
+    refreshCharacters,
+  ]);
+
+  /**
+   * =========================================================
+   * ADD CHARACTER
+   * =========================================================
+   */
   const addCharacter =
     useCallback(
-      async (input: CharacterInput) => {
+      async (
+        input: CharacterInput
+      ) => {
         const character =
           await createCharacter(input);
 
-        setCharacters((prev) => [
-          character,
-          ...prev,
-        ]);
+        /**
+         * Hanya update state jika user masih aktif.
+         */
+        if (
+          isAuthenticated &&
+          user?.id &&
+          activeUserIdRef.current ===
+            user.id
+        ) {
+          setCharacters((prev) => [
+            character,
+            ...prev,
+          ]);
+        }
 
         return character;
       },
-      []
+      [
+        isAuthenticated,
+        user?.id,
+      ]
     );
 
+  /**
+   * =========================================================
+   * EDIT CHARACTER
+   * =========================================================
+   */
   const editCharacter =
     useCallback(
       async (
@@ -193,22 +442,39 @@ export const CharacterProvider: React.FC<{
             input
           );
 
-        setCharacters((prev) =>
-          prev.map((item) =>
-            item.id === characterId
-              ? character
-              : item
-          )
-        );
+        if (
+          isAuthenticated &&
+          user?.id &&
+          activeUserIdRef.current ===
+            user.id
+        ) {
+          setCharacters((prev) =>
+            prev.map((item) =>
+              item.id === characterId
+                ? character
+                : item
+            )
+          );
+        }
 
         return character;
       },
-      []
+      [
+        isAuthenticated,
+        user?.id,
+      ]
     );
 
+  /**
+   * =========================================================
+   * DELETE CHARACTER
+   * =========================================================
+   */
   const removeCharacter =
     useCallback(
-      async (characterId: string) => {
+      async (
+        characterId: string
+      ) => {
         await deleteCharacter(
           characterId
         );
@@ -223,6 +489,11 @@ export const CharacterProvider: React.FC<{
       []
     );
 
+  /**
+   * =========================================================
+   * ADD RELATIONSHIP
+   * =========================================================
+   */
   const addRelationship =
     useCallback(
       async (
@@ -234,14 +505,18 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * =========================================================
+   * EDIT RELATIONSHIP
+   * =========================================================
+   */
   const editRelationship =
     useCallback(
       async (
@@ -255,14 +530,18 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * =========================================================
+   * DELETE RELATIONSHIP
+   * =========================================================
+   */
   const removeRelationship =
     useCallback(
       async (
@@ -274,14 +553,18 @@ export const CharacterProvider: React.FC<{
           relationshipId
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * =========================================================
+   * ADD CUSTOM ATTRIBUTE
+   * =========================================================
+   */
   const addCustomAttribute =
     useCallback(
       async (
@@ -293,14 +576,18 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * =========================================================
+   * EDIT CUSTOM ATTRIBUTE
+   * =========================================================
+   */
   const editCustomAttribute =
     useCallback(
       async (
@@ -314,14 +601,18 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * =========================================================
+   * DELETE CUSTOM ATTRIBUTE
+   * =========================================================
+   */
   const removeCustomAttribute =
     useCallback(
       async (
@@ -333,13 +624,18 @@ export const CharacterProvider: React.FC<{
           attributeId
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
+
+  /**
+   * =========================================================
+   * MENTIONS
+   * =========================================================
+   */
 
   const refreshMentions =
     useCallback(
@@ -347,15 +643,39 @@ export const CharacterProvider: React.FC<{
         bookId: string,
         chapterId: string
       ) => {
+        if (
+          !isAuthenticated ||
+          !user?.id ||
+          activeUserIdRef.current !==
+            user.id
+        ) {
+          setMentions([]);
+          return;
+        }
+
         const data =
           await getMentions(
             bookId,
             chapterId
           );
 
+        /**
+         * Jangan memasukkan mention jika user
+         * sudah berganti ketika request berjalan.
+         */
+        if (
+          activeUserIdRef.current !==
+          user.id
+        ) {
+          return;
+        }
+
         setMentions(data);
       },
-      []
+      [
+        isAuthenticated,
+        user?.id,
+      ]
     );
 
   const addMention =
@@ -372,14 +692,21 @@ export const CharacterProvider: React.FC<{
             input
           );
 
-        setMentions((prev) => [
-          ...prev,
-          mention,
-        ]);
+        if (
+          activeUserIdRef.current ===
+          user?.id
+        ) {
+          setMentions((prev) => [
+            ...prev,
+            mention,
+          ]);
+        }
 
         return mention;
       },
-      []
+      [
+        user?.id,
+      ]
     );
 
   const editMention =
@@ -398,17 +725,24 @@ export const CharacterProvider: React.FC<{
             input
           );
 
-        setMentions((prev) =>
-          prev.map((item) =>
-            item.id === mentionId
-              ? mention
-              : item
-          )
-        );
+        if (
+          activeUserIdRef.current ===
+          user?.id
+        ) {
+          setMentions((prev) =>
+            prev.map((item) =>
+              item.id === mentionId
+                ? mention
+                : item
+            )
+          );
+        }
 
         return mention;
       },
-      []
+      [
+        user?.id,
+      ]
     );
 
   const removeMention =

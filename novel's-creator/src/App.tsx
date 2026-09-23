@@ -151,18 +151,6 @@ const EMPTY_ADMIN_USER_FORM: AdminUserForm = {
 
 /* =========================================================
  * ADMIN DASHBOARD
- * =========================================================
- *
- * Frontend Stage 2:
- *
- * - GET    /api/admin/users
- * - POST   /api/admin/users
- * - PATCH  /api/admin/users/:userId
- * - DELETE /api/admin/users/:userId
- *
- * Backend tetap menjadi security boundary karena seluruh
- * endpoint /api/admin/* sudah dilindungi authMiddleware +
- * requireRole("admin").
  * ========================================================= */
 
 interface AdminDashboardViewProps {
@@ -174,134 +162,74 @@ function AdminDashboardView({
   currentUser,
   onLogout,
 }: AdminDashboardViewProps) {
-  const [
-    users,
-    setUsers,
-  ] = useState<AdminUser[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
 
-  const [
-    submitting,
-    setSubmitting,
-  ] = useState(false);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState<string | null>(null);
-
-  const [
-    successMessage,
-    setSuccessMessage,
-  ] = useState<string | null>(null);
-
-  const [
-    isModalOpen,
-    setIsModalOpen,
-  ] = useState(false);
-
-  const [
-    editingUser,
-    setEditingUser,
-  ] = useState<AdminUser | null>(null);
-
-  const [
-    form,
-    setForm,
-  ] = useState<AdminUserForm>(
+  const [form, setForm] = useState<AdminUserForm>(
     EMPTY_ADMIN_USER_FORM
   );
 
-  const [
-    searchQuery,
-    setSearchQuery,
-  ] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  /**
-   * Load seluruh user.
-   */
-  const loadUsers = useCallback(
-    async () => {
-      setLoading(true);
-      setErrorMessage(null);
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
 
-      try {
-        const response =
-          await apiRequest<{
-            success: boolean;
-            data: AdminUser[];
-          }>("/admin/users");
+    try {
+      const response = await apiRequest<{
+        success: boolean;
+        data: AdminUser[];
+      }>("/admin/users");
 
-        setUsers(
-          Array.isArray(response.data)
-            ? response.data
-            : []
-        );
-      } catch (error) {
-        console.error(
-          "Gagal mengambil data user admin:",
-          error
-        );
+      setUsers(
+        Array.isArray(response.data)
+          ? response.data
+          : []
+      );
+    } catch (error) {
+      console.error(
+        "Gagal mengambil data user admin:",
+        error
+      );
 
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Gagal mengambil data user."
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Gagal mengambil data user."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
 
-  /**
-   * Buka modal Create.
-   */
-  const handleOpenCreate = useCallback(
-    () => {
-      setEditingUser(null);
+  const handleOpenCreate = useCallback(() => {
+    setEditingUser(null);
+    setForm(EMPTY_ADMIN_USER_FORM);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsModalOpen(true);
+  }, []);
 
-      setForm(
-        EMPTY_ADMIN_USER_FORM
-      );
-
-      setErrorMessage(null);
-      setSuccessMessage(null);
-      setIsModalOpen(true);
-    },
-    []
-  );
-
-  /**
-   * Buka modal Edit.
-   */
   const handleOpenEdit = useCallback(
     (targetUser: AdminUser) => {
       setEditingUser(targetUser);
 
       setForm({
-        email:
-          targetUser.email ?? "",
-
+        email: targetUser.email ?? "",
         password: "",
-
-        authorName:
-          targetUser.author_name ?? "",
-
-        penName:
-          targetUser.pen_name ?? "",
-
-        role:
-          targetUser.role,
+        authorName: targetUser.author_name ?? "",
+        penName: targetUser.pen_name ?? "",
+        role: targetUser.role,
       });
 
       setErrorMessage(null);
@@ -311,26 +239,16 @@ function AdminDashboardView({
     []
   );
 
-  /**
-   * Tutup modal.
-   */
-  const handleCloseModal =
-    useCallback(() => {
-      if (submitting) {
-        return;
-      }
+  const handleCloseModal = useCallback(() => {
+    if (submitting) {
+      return;
+    }
 
-      setIsModalOpen(false);
-      setEditingUser(null);
+    setIsModalOpen(false);
+    setEditingUser(null);
+    setForm(EMPTY_ADMIN_USER_FORM);
+  }, [submitting]);
 
-      setForm(
-        EMPTY_ADMIN_USER_FORM
-      );
-    }, [submitting]);
-
-  /**
-   * Update form.
-   */
   const handleFormChange = useCallback(
     (
       field: keyof AdminUserForm,
@@ -344,333 +262,262 @@ function AdminDashboardView({
     []
   );
 
-  /**
-   * Submit Create / Edit.
-   */
-  const handleSubmit =
-    useCallback(
-      async (
-        event: React.FormEvent
-      ) => {
-        event.preventDefault();
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent) => {
+      event.preventDefault();
 
-        setErrorMessage(null);
-        setSuccessMessage(null);
+      setErrorMessage(null);
+      setSuccessMessage(null);
 
-        const email =
-          form.email.trim();
+      const email = form.email.trim();
+      const authorName = form.authorName.trim();
+      const penName = form.penName.trim();
 
-        const authorName =
-          form.authorName.trim();
+      if (!email) {
+        setErrorMessage("Email wajib diisi.");
+        return;
+      }
 
-        const penName =
-          form.penName.trim();
+      if (
+        !editingUser &&
+        !form.password.trim()
+      ) {
+        setErrorMessage(
+          "Password wajib diisi untuk user baru."
+        );
+        return;
+      }
 
-        if (!email) {
-          setErrorMessage(
-            "Email wajib diisi."
-          );
-          return;
-        }
+      setSubmitting(true);
 
-        if (
-          !editingUser &&
-          !form.password.trim()
-        ) {
-          setErrorMessage(
-            "Password wajib diisi untuk user baru."
-          );
-          return;
-        }
+      try {
+        if (editingUser) {
+          const payload: {
+            email: string;
+            authorName?: string;
+            penName?: string;
+            role: "admin" | "user";
+            password?: string;
+          } = {
+            email,
+            authorName:
+              authorName || undefined,
+            penName:
+              penName || undefined,
+            role: form.role,
+          };
 
-        setSubmitting(true);
-
-        try {
-          if (editingUser) {
-            const payload: {
-              email: string;
-              authorName?: string;
-              penName?: string;
-              role: "admin" | "user";
-              password?: string;
-            } = {
-              email,
-              authorName:
-                authorName || undefined,
-              penName:
-                penName || undefined,
-              role: form.role,
-            };
-
-            /**
-             * Password kosong ketika edit berarti
-             * password lama dipertahankan.
-             */
-            if (
-              form.password.trim()
-            ) {
-              payload.password =
-                form.password.trim();
-            }
-
-            const response =
-              await apiRequest<{
-                success: boolean;
-                message?: string;
-                data: AdminUser;
-              }>(
-                `/admin/users/${editingUser.id}`,
-                {
-                  method: "PATCH",
-                  body: JSON.stringify(
-                    payload
-                  ),
-                }
-              );
-
-            /**
-             * Update lokal jika response memiliki
-             * user hasil update.
-             */
-            if (response.data) {
-              setUsers(
-                (previous) =>
-                  previous.map(
-                    (item) =>
-                      item.id ===
-                        editingUser.id
-                        ? response.data
-                        : item
-                  )
-              );
-            } else {
-              await loadUsers();
-            }
-
-            setSuccessMessage(
-              response.message ||
-              "User berhasil diperbarui."
-            );
-          } else {
-            const response =
-              await apiRequest<{
-                success: boolean;
-                message?: string;
-                data: AdminUser;
-              }>(
-                "/admin/users",
-                {
-                  method: "POST",
-                  body: JSON.stringify({
-                    email,
-                    password:
-                      form.password.trim(),
-                    authorName:
-                      authorName ||
-                      undefined,
-                    penName:
-                      penName ||
-                      undefined,
-                    role: form.role,
-                  }),
-                }
-              );
-
-            if (response.data) {
-              setUsers(
-                (previous) => [
-                  response.data,
-                  ...previous,
-                ]
-              );
-            } else {
-              await loadUsers();
-            }
-
-            setSuccessMessage(
-              response.message ||
-              "User berhasil dibuat."
-            );
+          if (form.password.trim()) {
+            payload.password =
+              form.password.trim();
           }
 
-          setIsModalOpen(false);
-          setEditingUser(null);
-
-          setForm(
-            EMPTY_ADMIN_USER_FORM
-          );
-
-          /**
-           * Refresh dari backend setelah mutation
-           * agar source of truth tetap PostgreSQL.
-           */
-          await loadUsers();
-        } catch (error) {
-          console.error(
-            "Gagal menyimpan user admin:",
-            error
-          );
-
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Gagal menyimpan user."
-          );
-        } finally {
-          setSubmitting(false);
-        }
-      },
-      [
-        editingUser,
-        form,
-        loadUsers,
-      ]
-    );
-
-  /**
-   * Delete user.
-   */
-  const handleDelete =
-    useCallback(
-      async (
-        targetUser: AdminUser
-      ) => {
-        /**
-         * Self-delete dicegah di frontend.
-         *
-         * Backend tetap melakukan validasi
-         * CANNOT_DELETE_SELF.
-         */
-        if (
-          targetUser.id ===
-          currentUser.id
-        ) {
-          setErrorMessage(
-            "Admin tidak dapat menghapus akun sendiri."
-          );
-
-          return;
-        }
-
-        const confirmed =
-          window.confirm(
-            `Hapus user ${targetUser.email}? Tindakan ini tidak dapat dibatalkan.`
-          );
-
-        if (!confirmed) {
-          return;
-        }
-
-        setErrorMessage(null);
-        setSuccessMessage(null);
-        setSubmitting(true);
-
-        try {
           const response =
             await apiRequest<{
               success: boolean;
               message?: string;
+              data: AdminUser;
             }>(
-              `/admin/users/${targetUser.id}`,
+              `/admin/users/${editingUser.id}`,
               {
-                method: "DELETE",
+                method: "PATCH",
+                body: JSON.stringify(payload),
               }
             );
 
-          setUsers(
-            (previous) =>
-              previous.filter(
-                (item) =>
-                  item.id !==
-                  targetUser.id
+          if (response.data) {
+            setUsers((previous) =>
+              previous.map((item) =>
+                item.id === editingUser.id
+                  ? response.data
+                  : item
               )
-          );
+            );
+          } else {
+            await loadUsers();
+          }
 
           setSuccessMessage(
             response.message ||
-            "User berhasil dihapus."
+            "User berhasil diperbarui."
           );
+        } else {
+          const response =
+            await apiRequest<{
+              success: boolean;
+              message?: string;
+              data: AdminUser;
+            }>(
+              "/admin/users",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  email,
+                  password:
+                    form.password.trim(),
+                  authorName:
+                    authorName ||
+                    undefined,
+                  penName:
+                    penName ||
+                    undefined,
+                  role: form.role,
+                }),
+              }
+            );
 
-          /**
-           * Refresh dari backend untuk memastikan
-           * tabel benar-benar sesuai database.
-           */
-          await loadUsers();
-        } catch (error) {
-          console.error(
-            "Gagal menghapus user:",
-            error
-          );
+          if (response.data) {
+            setUsers((previous) => [
+              response.data,
+              ...previous,
+            ]);
+          } else {
+            await loadUsers();
+          }
 
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : "Gagal menghapus user."
+          setSuccessMessage(
+            response.message ||
+            "User berhasil dibuat."
           );
-        } finally {
-          setSubmitting(false);
         }
-      },
-      [
-        currentUser.id,
-        loadUsers,
-      ]
-    );
 
-  /**
-   * Search hanya di frontend.
-   *
-   * Tidak mengubah endpoint backend.
-   */
-  const filteredUsers =
-    useMemo(() => {
-      const query =
-        searchQuery
-          .trim()
-          .toLowerCase();
+        setIsModalOpen(false);
+        setEditingUser(null);
+        setForm(EMPTY_ADMIN_USER_FORM);
 
-      if (!query) {
-        return users;
+        await loadUsers();
+      } catch (error) {
+        console.error(
+          "Gagal menyimpan user admin:",
+          error
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Gagal menyimpan user."
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      editingUser,
+      form,
+      loadUsers,
+    ]
+  );
+
+  const handleDelete = useCallback(
+    async (targetUser: AdminUser) => {
+      if (
+        targetUser.id ===
+        currentUser.id
+      ) {
+        setErrorMessage(
+          "Admin tidak dapat menghapus akun sendiri."
+        );
+
+        return;
       }
 
-      return users.filter(
-        (item) => {
-          const email =
-            item.email
-              ?.toLowerCase() ??
-            "";
+      const confirmed =
+        window.confirm(
+          `Hapus user ${targetUser.email}? Tindakan ini tidak dapat dibatalkan.`
+        );
 
-          const authorName =
-            item.author_name
-              ?.toLowerCase() ??
-            "";
+      if (!confirmed) {
+        return;
+      }
 
-          const penName =
-            item.pen_name
-              ?.toLowerCase() ??
-            "";
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      setSubmitting(true);
 
-          const role =
-            item.role
-              ?.toLowerCase() ??
-            "";
-
-          return (
-            email.includes(query) ||
-            authorName.includes(
-              query
-            ) ||
-            penName.includes(
-              query
-            ) ||
-            role.includes(query)
+      try {
+        const response =
+          await apiRequest<{
+            success: boolean;
+            message?: string;
+          }>(
+            `/admin/users/${targetUser.id}`,
+            {
+              method: "DELETE",
+            }
           );
-        }
+
+        setUsers((previous) =>
+          previous.filter(
+            (item) =>
+              item.id !==
+              targetUser.id
+          )
+        );
+
+        setSuccessMessage(
+          response.message ||
+          "User berhasil dihapus."
+        );
+
+        await loadUsers();
+      } catch (error) {
+        console.error(
+          "Gagal menghapus user:",
+          error
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Gagal menghapus user."
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      currentUser.id,
+      loadUsers,
+    ]
+  );
+
+  const filteredUsers = useMemo(() => {
+    const query =
+      searchQuery
+        .trim()
+        .toLowerCase();
+
+    if (!query) {
+      return users;
+    }
+
+    return users.filter((item) => {
+      const email =
+        item.email?.toLowerCase() ?? "";
+
+      const authorName =
+        item.author_name?.toLowerCase() ??
+        "";
+
+      const penName =
+        item.pen_name?.toLowerCase() ??
+        "";
+
+      const role =
+        item.role?.toLowerCase() ??
+        "";
+
+      return (
+        email.includes(query) ||
+        authorName.includes(query) ||
+        penName.includes(query) ||
+        role.includes(query)
       );
-    }, [
-      users,
-      searchQuery,
-    ]);
+    });
+  }, [
+    users,
+    searchQuery,
+  ]);
 
   const adminCount =
     users.filter(
@@ -684,39 +531,35 @@ function AdminDashboardView({
         item.role === "user"
     ).length;
 
-  const formatDate =
-    (value?: string) => {
-      if (!value) {
-        return "-";
+  const formatDate = (
+    value?: string
+  ) => {
+    if (!value) {
+      return "-";
+    }
+
+    const date = new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return value;
+    }
+
+    return date.toLocaleDateString(
+      "id-ID",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
       }
-
-      const date =
-        new Date(value);
-
-      if (
-        Number.isNaN(
-          date.getTime()
-        )
-      ) {
-        return value;
-      }
-
-      return date.toLocaleDateString(
-        "id-ID",
-        {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }
-      );
-    };
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#121212] text-[#E0E0E0] flex flex-col">
-      {/* =====================================================
-          ADMIN HEADER
-          ===================================================== */}
-
       <header className="border-b border-[#2A2A3C] bg-[#1E1E2E] shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="h-16 flex items-center justify-between gap-4">
@@ -761,13 +604,7 @@ function AdminDashboardView({
         </div>
       </header>
 
-      {/* =====================================================
-          ADMIN CONTENT
-          ===================================================== */}
-
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Page heading */}
-
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
           <div>
             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-[#D4AF37] mb-2">
@@ -799,10 +636,11 @@ function AdminDashboardView({
               className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-[#303046] bg-[#171724] hover:bg-[#222234] hover:border-[#D4AF37]/40 disabled:opacity-50 disabled:cursor-not-allowed text-xs text-[#D8D8E8] transition-colors"
             >
               <RefreshCw
-                className={`w-4 h-4 ${loading
+                className={`w-4 h-4 ${
+                  loading
                     ? "animate-spin"
                     : ""
-                  }`}
+                }`}
               />
 
               <span>
@@ -824,10 +662,6 @@ function AdminDashboardView({
             </button>
           </div>
         </div>
-
-        {/* ===================================================
-            SUMMARY
-            =================================================== */}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           <div className="rounded-2xl border border-[#2A2A3C] bg-[#1E1E2E] p-4">
@@ -885,10 +719,6 @@ function AdminDashboardView({
           </div>
         </div>
 
-        {/* ===================================================
-            ALERTS
-            =================================================== */}
-
         {errorMessage && (
           <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-900/70 bg-red-950/40 px-4 py-3">
             <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
@@ -930,10 +760,6 @@ function AdminDashboardView({
             </button>
           </div>
         )}
-
-        {/* ===================================================
-            USER TABLE CARD
-            =================================================== */}
 
         <section className="rounded-2xl border border-[#2A2A3C] bg-[#1E1E2E] overflow-hidden">
           <div className="px-4 sm:px-5 py-4 border-b border-[#2A2A3C] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1028,7 +854,7 @@ function AdminDashboardView({
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-[#171724] border border-[#34344A] flex items-center justify-center shrink-0">
                                 {item.role ===
-                                  "admin" ? (
+                                "admin" ? (
                                   <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
                                 ) : (
                                   <UserRound className="w-4 h-4 text-[#8A8A9E]" />
@@ -1072,7 +898,7 @@ function AdminDashboardView({
 
                           <td className="px-5 py-4">
                             {item.role ===
-                              "admin" ? (
+                            "admin" ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/25 text-[10px] font-semibold text-[#D4AF37]">
                                 <ShieldCheck className="w-3 h-3" />
                                 Admin
@@ -1142,10 +968,6 @@ function AdminDashboardView({
         </section>
       </main>
 
-      {/* =====================================================
-          FOOTER
-          ===================================================== */}
-
       <footer className="h-10 bg-[#1E1E2E] border-t border-[#2A2A3C] flex items-center justify-between px-4 sm:px-8 text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-[#D4AF37]">
@@ -1176,15 +998,9 @@ function AdminDashboardView({
         </div>
       </footer>
 
-      {/* =====================================================
-          CREATE / EDIT MODAL
-          ===================================================== */}
-
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-[#1E1E2E] border border-[#303046] rounded-2xl shadow-2xl overflow-hidden">
-            {/* Modal header */}
-
             <div className="px-5 py-4 border-b border-[#2A2A3C] flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-[#FAF7EE]">
@@ -1213,16 +1029,12 @@ function AdminDashboardView({
               </button>
             </div>
 
-            {/* Modal form */}
-
             <form
               onSubmit={
                 handleSubmit
               }
               className="p-5 space-y-4"
             >
-              {/* Email */}
-
               <div>
                 <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
                   Email
@@ -1236,14 +1048,10 @@ function AdminDashboardView({
                     value={
                       form.email
                     }
-                    onChange={(
-                      event
-                    ) =>
+                    onChange={(event) =>
                       handleFormChange(
                         "email",
-                        event
-                          .target
-                          .value
+                        event.target.value
                       )
                     }
                     placeholder="user@novel.id"
@@ -1254,8 +1062,6 @@ function AdminDashboardView({
                   />
                 </div>
               </div>
-
-              {/* Password */}
 
               <div>
                 <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
@@ -1275,14 +1081,10 @@ function AdminDashboardView({
                     value={
                       form.password
                     }
-                    onChange={(
-                      event
-                    ) =>
+                    onChange={(event) =>
                       handleFormChange(
                         "password",
-                        event
-                          .target
-                          .value
+                        event.target.value
                       )
                     }
                     placeholder="••••••••"
@@ -1293,8 +1095,6 @@ function AdminDashboardView({
                   />
                 </div>
               </div>
-
-              {/* Author / Pen name */}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1310,14 +1110,10 @@ function AdminDashboardView({
                       value={
                         form.authorName
                       }
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         handleFormChange(
                           "authorName",
-                          event
-                            .target
-                            .value
+                          event.target.value
                         )
                       }
                       placeholder="Nama Penulis"
@@ -1342,14 +1138,10 @@ function AdminDashboardView({
                       value={
                         form.penName
                       }
-                      onChange={(
-                        event
-                      ) =>
+                      onChange={(event) =>
                         handleFormChange(
                           "penName",
-                          event
-                            .target
-                            .value
+                          event.target.value
                         )
                       }
                       placeholder="Nama Pena"
@@ -1362,8 +1154,6 @@ function AdminDashboardView({
                 </div>
               </div>
 
-              {/* Role */}
-
               <div>
                 <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
                   Role
@@ -1373,16 +1163,12 @@ function AdminDashboardView({
                   value={
                     form.role
                   }
-                  onChange={(
-                    event
-                  ) =>
+                  onChange={(event) =>
                     handleFormChange(
                       "role",
-                      event
-                        .target
-                        .value as
-                      | "admin"
-                      | "user"
+                      event.target.value as
+                        | "admin"
+                        | "user"
                     )
                   }
                   disabled={
@@ -1390,7 +1176,7 @@ function AdminDashboardView({
                     (
                       !!editingUser &&
                       editingUser.id ===
-                      currentUser.id
+                        currentUser.id
                     )
                   }
                   className="w-full px-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] disabled:opacity-50"
@@ -1406,7 +1192,7 @@ function AdminDashboardView({
 
                 {editingUser &&
                   editingUser.id ===
-                  currentUser.id && (
+                    currentUser.id && (
                     <p className="text-[10px] text-[#77778C] mt-1.5">
                       Role akun admin yang sedang
                       digunakan tidak dapat
@@ -1414,8 +1200,6 @@ function AdminDashboardView({
                     </p>
                   )}
               </div>
-
-              {/* Form actions */}
 
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
@@ -1506,7 +1290,20 @@ function MainAppContent() {
 
   const {
     characters,
+
+    /*
+     * PENTING:
+     * refreshCharacters TETAP dipakai di App.tsx.
+     *
+     * Jangan hapus dari destructuring karena
+     * handleSaveCharacter() memanggilnya setelah
+     * karakter berhasil disimpan.
+     *
+     * Yang dihapus hanya auto-load character
+     * dari useEffect App.tsx.
+     */
     refreshCharacters,
+
     addCharacter,
     editCharacter,
     removeCharacter,
@@ -1578,16 +1375,6 @@ function MainAppContent() {
     setIsQuickNotesOpen,
   ] = useState(false);
 
-  /**
-   * Normalisasi data Book dari API.
-   *
-   * currentWordCount HARUS berasal dari:
-   *
-   * books.current_word_count
-   *
-   * yang sudah disinkronkan oleh backend
-   * berdasarkan SUM(chapters.word_count).
-   */
   const books: Book[] =
     useMemo(
       () =>
@@ -1616,12 +1403,12 @@ function MainAppContent() {
 
             genres: Array.isArray(b.genres)
               ? b.genres
-                .map((genre: any) =>
-                  typeof genre === "string"
-                    ? genre
-                    : genre?.name
-                )
-                .filter(Boolean)
+                  .map((genre: any) =>
+                    typeof genre === "string"
+                      ? genre
+                      : genre?.name
+                  )
+                  .filter(Boolean)
               : b.genre
                 ? [b.genre]
                 : [],
@@ -1648,13 +1435,16 @@ function MainAppContent() {
       }
 
       try {
-        const notes = await getQuickNotesRequest();
+        const notes =
+          await getQuickNotesRequest();
+
         setQuickNotes(notes);
       } catch (error) {
         console.error(
           "Gagal mengambil quick notes:",
           error
         );
+
         setQuickNotes([]);
       }
     }, [isAuthenticated]);
@@ -1664,23 +1454,7 @@ function MainAppContent() {
   }, [refreshQuickNotes]);
 
   /**
-   * Load character data.
-   */
-  useEffect(() => {
-    if (!isAuthenticated) {
-      return;
-    }
-
-    void refreshCharacters();
-  }, [
-    isAuthenticated,
-    refreshCharacters,
-  ]);
-
-  /**
-   * =========================================================
    * LOAD SEMUA CHAPTER SEMUA BOOK
-   * =========================================================
    */
   useEffect(() => {
     if (!isAuthenticated) {
@@ -1723,16 +1497,19 @@ function MainAppContent() {
   ]);
 
   /**
-   * Setelah login.
+   * PERHATIKAN:
    *
-   * Tidak perlu memaksa currentView ke workspace.
+   * Tidak ada lagi:
    *
-   * User admin akan otomatis dirender sebagai
-   * AdminDashboardView berdasarkan role pada
-   * AuthContext.
+   * useEffect(() => {
+   *   if (!isAuthenticated || !user?.id) return;
+   *   void refreshCharacters();
+   * }, [...]);
    *
-   * User biasa tetap masuk Workspace.
+   * CharacterProvider sekarang menjadi pemilik lifecycle
+   * loading characters berdasarkan user.
    */
+
   const handleAuthSuccess =
     useCallback(() => {
       setAppStage("app");
@@ -1740,9 +1517,6 @@ function MainAppContent() {
       void refreshBooks();
     }, [refreshBooks]);
 
-  /**
-   * Splash selesai.
-   */
   const handleSplashFinish =
     useCallback(() => {
       if (isAuthenticated) {
@@ -1752,9 +1526,6 @@ function MainAppContent() {
       }
     }, [isAuthenticated]);
 
-  /**
-   * Tutorial close.
-   */
   const handleCloseTutorial =
     useCallback(() => {
       setIsTutorialOpen(false);
@@ -1768,7 +1539,7 @@ function MainAppContent() {
             "tut-dummy"
           ) ||
           targetBookId ===
-          TUTORIAL_DUMMY_BOOK_ID
+            TUTORIAL_DUMMY_BOOK_ID
         )
       ) {
         setTargetBookId(null);
@@ -1781,7 +1552,7 @@ function MainAppContent() {
             "tut-dummy"
           ) ||
           targetChapterId ===
-          TUTORIAL_DUMMY_CHAPTER_1_ID
+            TUTORIAL_DUMMY_CHAPTER_1_ID
         )
       ) {
         setTargetChapterId(null);
@@ -1801,9 +1572,6 @@ function MainAppContent() {
       handleCloseTutorial,
     ]);
 
-  /**
-   * Logout.
-   */
   const handleLogout =
     useCallback(() => {
       logout();
@@ -1815,15 +1583,11 @@ function MainAppContent() {
       setTargetChapterId(null);
 
       setIsTutorialOpen(false);
-      setIsProfileSettingsOpen(
-        false
-      );
+      setIsProfileSettingsOpen(false);
       setIsSearchOpen(false);
       setIsQuickNotesOpen(false);
 
-      setCurrentView(
-        "workspace"
-      );
+      setCurrentView("workspace");
 
       setAppStage("auth");
     }, [
@@ -1842,7 +1606,7 @@ function MainAppContent() {
         (e.ctrlKey ||
           e.metaKey) &&
         e.key.toLowerCase() ===
-        "k"
+          "k"
       ) {
         e.preventDefault();
 
@@ -1855,7 +1619,7 @@ function MainAppContent() {
         (e.ctrlKey ||
           e.metaKey) &&
         e.key.toLowerCase() ===
-        "m"
+          "m"
       ) {
         e.preventDefault();
 
@@ -1879,12 +1643,7 @@ function MainAppContent() {
   }, []);
 
   /**
-   * Sinkronisasi genre Book melalui endpoint genre yang
-   * memang tersedia pada branch repair/fix.
-   *
-   * BookContext saat ini belum menerima field genres pada
-   * CreateBookInput / UpdateBookInput, sehingga relasi
-   * book_genres dikelola di App setelah book tersimpan.
+   * Sinkronisasi genre Book.
    */
   const syncBookGenres = useCallback(
     async (
@@ -1892,66 +1651,120 @@ function MainAppContent() {
       genreNames: string[],
       currentGenres: any[] = []
     ) => {
-      const normalizedNames = Array.from(
-        new Set(
-          (genreNames || [])
-            .map((name) => String(name).trim())
-            .filter(Boolean)
-        )
-      );
+      const normalizedNames =
+        Array.from(
+          new Set(
+            (genreNames || [])
+              .map((name) =>
+                String(name).trim()
+              )
+              .filter(Boolean)
+          )
+        );
 
       const genreResponse =
         await apiRequest<{
           success: boolean;
-          data: Array<{ id: string; name: string }>;
+          data: Array<{
+            id: string;
+            name: string;
+          }>;
         }>("/genres");
 
-      const genreMap = new Map<string, string>();
+      const genreMap =
+        new Map<string, string>();
 
-      for (const genre of genreResponse.data || []) {
-        genreMap.set(genre.name.trim().toLowerCase(), genre.id);
+      for (const genre of
+        genreResponse.data || []) {
+        genreMap.set(
+          genre.name
+            .trim()
+            .toLowerCase(),
+          genre.id
+        );
       }
 
-      const desiredGenreIds: string[] = [];
+      const desiredGenreIds: string[] =
+        [];
 
-      for (const name of normalizedNames) {
-        const key = name.toLowerCase();
-        let genreId = genreMap.get(key);
+      for (const name of
+        normalizedNames) {
+        const key =
+          name.toLowerCase();
+
+        let genreId =
+          genreMap.get(key);
 
         if (!genreId) {
           const created =
             await apiRequest<{
               success: boolean;
-              data: { id: string; name: string };
+              data: {
+                id: string;
+                name: string;
+              };
             }>("/genres", {
               method: "POST",
-              body: JSON.stringify({ name }),
+              body: JSON.stringify({
+                name,
+              }),
             });
 
-          genreId = created.data.id;
-          genreMap.set(key, genreId);
+          genreId =
+            created.data.id;
+
+          genreMap.set(
+            key,
+            genreId
+          );
         }
 
-        desiredGenreIds.push(genreId);
+        desiredGenreIds.push(
+          genreId
+        );
       }
 
-      const currentGenreIds = (currentGenres || [])
-        .map((genre) => genre?.id)
-        .filter(Boolean) as string[];
+      const currentGenreIds =
+        (currentGenres || [])
+          .map(
+            (genre) =>
+              genre?.id
+          )
+          .filter(Boolean) as string[];
 
-      for (const genreId of currentGenreIds) {
-        if (!desiredGenreIds.includes(genreId)) {
+      for (const genreId of
+        currentGenreIds) {
+        if (
+          !desiredGenreIds.includes(
+            genreId
+          )
+        ) {
           await apiRequest(
-            `/genres/books/${encodeURIComponent(bookId)}/${encodeURIComponent(genreId)}`,
-            { method: "DELETE" }
+            `/genres/books/${encodeURIComponent(
+              bookId
+            )}/${encodeURIComponent(
+              genreId
+            )}`,
+            {
+              method: "DELETE",
+            }
           );
         }
       }
 
-      for (const genreId of desiredGenreIds) {
-        if (!currentGenreIds.includes(genreId)) {
+      for (const genreId of
+        desiredGenreIds) {
+        if (
+          !currentGenreIds.includes(
+            genreId
+          )
+        ) {
           await apiRequest(
-            `/genres/books/${encodeURIComponent(bookId)}/${encodeURIComponent(genreId)}`,
+            `/genres/books/${encodeURIComponent(
+              bookId
+            )}/${encodeURIComponent(
+              genreId
+            )}`,
             {
               method: "POST",
               body: JSON.stringify({}),
@@ -1969,11 +1782,13 @@ function MainAppContent() {
   const handleSaveBook =
     useCallback(
       async (book: Book) => {
-        const targetWords = Number(
-          book.targetWordCount ??
-          (book as any).target_word_count ??
-          50000
-        );
+        const targetWords =
+          Number(
+            book.targetWordCount ??
+              (book as any)
+                .target_word_count ??
+              50000
+          );
 
         const coverUrl =
           (book as any).coverUrl ??
@@ -1981,13 +1796,17 @@ function MainAppContent() {
           "";
 
         if (!book.id) {
-          const created = await addBook({
-            title: book.title,
-            synopsis: book.synopsis,
-            coverUrl,
-            targetWordCount: targetWords,
-            status: book.status || "draft",
-          });
+          const created =
+            await addBook({
+              title: book.title,
+              synopsis: book.synopsis,
+              coverUrl,
+              targetWordCount:
+                targetWords,
+              status:
+                book.status ||
+                "draft",
+            });
 
           await syncBookGenres(
             created.id,
@@ -1996,21 +1815,28 @@ function MainAppContent() {
           );
 
           await refreshBooks();
+
           return;
         }
 
         const existingBook =
           contextBooks.find(
-            (item) => item.id === book.id
+            (item) =>
+              item.id === book.id
           );
 
-        await editBook(book.id, {
-          title: book.title,
-          synopsis: book.synopsis,
-          coverUrl,
-          targetWordCount: targetWords,
-          status: book.status,
-        });
+        await editBook(
+          book.id,
+          {
+            title: book.title,
+            synopsis: book.synopsis,
+            coverUrl,
+            targetWordCount:
+              targetWords,
+            status:
+              book.status,
+          }
+        );
 
         await syncBookGenres(
           book.id,
@@ -2040,22 +1866,16 @@ function MainAppContent() {
         }
 
         try {
-          await removeBook(
-            bookId
-          );
+          await removeBook(bookId);
 
-          clearChapters(
-            bookId
-          );
+          clearChapters(bookId);
 
           if (
             targetBookId ===
             bookId
           ) {
             setTargetBookId(null);
-            setTargetChapterId(
-              null
-            );
+            setTargetChapterId(null);
           }
         } catch (error) {
           console.error(
@@ -2074,9 +1894,7 @@ function MainAppContent() {
     );
 
   /**
-   * =========================================================
-   * SAVE CHAPTER
-   * =========================================================
+   * Save Chapter.
    */
   const handleSaveChapter =
     useCallback(
@@ -2108,16 +1926,12 @@ function MainAppContent() {
               {
                 chapterNumber:
                   chapter.chapterNumber,
-
                 title:
                   chapter.title,
-
                 content:
                   chapter.content,
-
                 status:
                   chapter.status,
-
                 sortOrder:
                   chapter.order,
               }
@@ -2129,34 +1943,20 @@ function MainAppContent() {
               {
                 chapterNumber:
                   chapter.chapterNumber,
-
                 title:
                   chapter.title,
-
                 content:
                   chapter.content,
-
                 status:
                   chapter.status,
-
                 sortOrder:
                   chapter.order,
               }
             );
           }
 
-          /**
-           * Backend sudah memperbarui:
-           *
-           * books.current_word_count
-           *
-           * berdasarkan SUM(chapters.word_count).
-           */
           await refreshBooks();
 
-          /**
-           * Sinkronkan cache chapter.
-           */
           await refreshChapters(
             bookId
           );
@@ -2194,7 +1994,7 @@ function MainAppContent() {
 
         const bookChapters =
           chaptersByBook[
-          targetBookId
+            targetBookId
           ] ?? [];
 
         const chapter =
@@ -2224,9 +2024,7 @@ function MainAppContent() {
             targetChapterId ===
             chapterId
           ) {
-            setTargetChapterId(
-              null
-            );
+            setTargetChapterId(null);
           }
         } catch (error) {
           console.error(
@@ -2252,22 +2050,37 @@ function MainAppContent() {
    */
   const handleSaveCharacter =
     useCallback(
-      async (character: CharacterWiki) => {
+      async (
+        character: CharacterWiki
+      ) => {
         try {
           const payload = {
-            fullName: character.fullName,
-            alias: character.alias,
-            age: character.age,
-            gender: character.gender,
-            roleTag: character.roleTag,
-            status: character.status,
-            avatarUrl: character.avatarUrl,
-            physicalAppearance: character.physicalAppearance,
-            personalityTraits: character.personalityTraits,
-            backstory: character.backstory,
-            motivation: character.motivation,
-            worldGoal: character.worldGoal,
-            bookIds: character.bookIds,
+            fullName:
+              character.fullName,
+            alias:
+              character.alias,
+            age:
+              character.age,
+            gender:
+              character.gender,
+            roleTag:
+              character.roleTag,
+            status:
+              character.status,
+            avatarUrl:
+              character.avatarUrl,
+            physicalAppearance:
+              character.physicalAppearance,
+            personalityTraits:
+              character.personalityTraits,
+            backstory:
+              character.backstory,
+            motivation:
+              character.motivation,
+            worldGoal:
+              character.worldGoal,
+            bookIds:
+              character.bookIds,
           };
 
           const isPersistedCharacter =
@@ -2278,23 +2091,28 @@ function MainAppContent() {
           const previousCharacter =
             isPersistedCharacter
               ? characters.find(
-                (item) => item.id === character.id
-              )
+                  (item) =>
+                    item.id ===
+                    character.id
+                )
               : undefined;
 
           const savedCharacter =
             isPersistedCharacter
               ? await editCharacter(
-                character.id,
-                payload
-              )
-              : await addCharacter(payload);
+                  character.id,
+                  payload
+                )
+              : await addCharacter(
+                  payload
+                );
 
-          // Backend branch repair/fix memiliki endpoint terpisah
-          // untuk custom attributes dan relationships.
-          // Sinkronkan nested data setelah karakter utama tersimpan.
-          if (previousCharacter) {
-            for (const attr of previousCharacter.customAttributes || []) {
+          if (
+            previousCharacter
+          ) {
+            for (const attr of
+              previousCharacter.customAttributes ||
+              []) {
               if (attr.id) {
                 await removeCustomAttribute(
                   savedCharacter.id,
@@ -2303,7 +2121,9 @@ function MainAppContent() {
               }
             }
 
-            for (const rel of previousCharacter.relationships || []) {
+            for (const rel of
+              previousCharacter.relationships ||
+              []) {
               if (rel.id) {
                 await removeRelationship(
                   savedCharacter.id,
@@ -2313,35 +2133,61 @@ function MainAppContent() {
             }
           }
 
-          for (const attr of character.customAttributes || []) {
-            const key = attr.key.trim();
-            const value = attr.value.trim();
+          for (const attr of
+            character.customAttributes ||
+            []) {
+            const key =
+              attr.key.trim();
 
-            if (!key && !value) {
+            const value =
+              attr.value.trim();
+
+            if (
+              !key &&
+              !value
+            ) {
               continue;
             }
 
             await addCustomAttribute(
               savedCharacter.id,
-              { key, value }
+              {
+                key,
+                value,
+              }
             );
           }
 
-          for (const rel of character.relationships || []) {
-            if (!rel.targetCharacterId || rel.targetCharacterId === savedCharacter.id) {
+          for (const rel of
+            character.relationships ||
+            []) {
+            if (
+              !rel.targetCharacterId ||
+              rel.targetCharacterId ===
+                savedCharacter.id
+            ) {
               continue;
             }
 
             await addRelationship(
               savedCharacter.id,
               {
-                targetCharacterId: rel.targetCharacterId,
-                relationType: rel.relationType.trim(),
-                description: rel.description?.trim() || "",
+                targetCharacterId:
+                  rel.targetCharacterId,
+                relationType:
+                  rel.relationType.trim(),
+                description:
+                  rel.description?.trim() ||
+                  "",
               }
             );
           }
 
+          /*
+           * refreshCharacters tetap diperlukan
+           * setelah save agar Character Wiki mengambil
+           * data terbaru dari backend.
+           */
           await refreshCharacters();
         } catch (error) {
           console.error(
@@ -2393,7 +2239,9 @@ function MainAppContent() {
    */
   const handleSaveQuickNote =
     useCallback(
-      async (note: QuickNote) => {
+      async (
+        note: QuickNote
+      ) => {
         const isPersistedNote =
           /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
             note.id
@@ -2420,7 +2268,9 @@ function MainAppContent() {
    */
   const handleDeleteQuickNote =
     useCallback(
-      async (noteId: string) => {
+      async (
+        noteId: string
+      ) => {
         await deleteQuickNoteRequest(
           noteId
         );
@@ -2436,9 +2286,7 @@ function MainAppContent() {
   const handleAddCustomGenre =
     useCallback(
       (genre: string) => {
-        saveCustomGenre(
-          genre
-        );
+        saveCustomGenre(genre);
 
         setCustomGenres(
           getCustomGenres()
@@ -2494,28 +2342,56 @@ function MainAppContent() {
       ]
     );
 
-  const userProfileForUI: UserAuthorProfile | null =
+  const userProfileForUI:
+    UserAuthorProfile | null =
     user
       ? {
-        id: user.id,
-        username: user.email,
-        email: user.email,
-        authorName: user.author_name ?? "",
-        penName: user.pen_name ?? "",
-        bio: user.bio ?? "",
-        avatarUrl: user.avatar_url ?? "",
-        dailyWordGoal: Number(user.daily_word_goal ?? 0),
-        todayWordCount: Number(user.today_word_count ?? 0),
-        lastActiveDate:
-          user.last_active_date ??
-          new Date().toISOString().split("T")[0],
-        theme: "dark",
-        soundEffects: user.sound_effects ?? true,
-        preferredGenre: user.preferred_genre ?? undefined,
-        hasCompletedTutorial: Boolean(user.tutorial_completed),
-        isAuthenticated: isAuthenticated,
-        createdAt: user.created_at ?? new Date().toISOString(),
-      }
+          id: user.id,
+          username: user.email,
+          email: user.email,
+          authorName:
+            user.author_name ??
+            "",
+          penName:
+            user.pen_name ??
+            "",
+          bio:
+            user.bio ?? "",
+          avatarUrl:
+            user.avatar_url ??
+            "",
+          dailyWordGoal:
+            Number(
+              user.daily_word_goal ??
+                0
+            ),
+          todayWordCount:
+            Number(
+              user.today_word_count ??
+                0
+            ),
+          lastActiveDate:
+            user.last_active_date ??
+            new Date()
+              .toISOString()
+              .split("T")[0],
+          theme: "dark",
+          soundEffects:
+            user.sound_effects ??
+            true,
+          preferredGenre:
+            user.preferred_genre ??
+            undefined,
+          hasCompletedTutorial:
+            Boolean(
+              user.tutorial_completed
+            ),
+          isAuthenticated:
+            isAuthenticated,
+          createdAt:
+            user.created_at ??
+            new Date().toISOString(),
+        }
       : null;
 
   const isDummyActive =
@@ -2523,25 +2399,25 @@ function MainAppContent() {
 
   const displayBooks =
     isDummyActive &&
-      books.length === 0
+    books.length === 0
       ? TUTORIAL_DUMMY_BOOKS
       : books;
 
   const displayChapters =
     isDummyActive &&
-      chapters.length === 0
+    chapters.length === 0
       ? TUTORIAL_DUMMY_CHAPTERS
       : chapters;
 
   const displayCharacters =
     isDummyActive &&
-      characters.length === 0
+    characters.length === 0
       ? TUTORIAL_DUMMY_CHARACTERS
       : characters;
 
   const displayQuickNotes =
     isDummyActive &&
-      quickNotes.length === 0
+    quickNotes.length === 0
       ? TUTORIAL_DUMMY_QUICK_NOTES
       : quickNotes;
 
@@ -2573,10 +2449,9 @@ function MainAppContent() {
       if (
         isDummyActive &&
         displayBooks.length >
-        0
+          0
       ) {
-        return displayBooks[0]
-          .id;
+        return displayBooks[0].id;
       }
 
       return (
@@ -2611,15 +2486,15 @@ function MainAppContent() {
       const availableChapters =
         isDummyBook
           ? displayChapters.filter(
-            (chapter) =>
-              chapter.bookId ===
-              activeEditorBookId
-          )
+              (chapter) =>
+                chapter.bookId ===
+                activeEditorBookId
+            )
           : (
-            chaptersByBook[
-            activeEditorBookId
-            ] ?? []
-          );
+              chaptersByBook[
+                activeEditorBookId
+              ] ?? []
+            );
 
       if (
         targetChapterId &&
@@ -2634,7 +2509,8 @@ function MainAppContent() {
 
       return (
         availableChapters[0]
-          ?.id ?? null
+          ?.id ??
+        null
       );
     }, [
       activeEditorBookId,
@@ -2670,8 +2546,7 @@ function MainAppContent() {
   ]);
 
   /**
-   * Bersihkan target Chapter jika
-   * sudah tidak menjadi milik Book aktif.
+   * Bersihkan target Chapter.
    */
   useEffect(() => {
     if (
@@ -2692,15 +2567,15 @@ function MainAppContent() {
     const availableChapters =
       isDummyBook
         ? displayChapters.filter(
-          (chapter) =>
-            chapter.bookId ===
-            targetBookId
-        )
+            (chapter) =>
+              chapter.bookId ===
+              targetBookId
+          )
         : (
-          chaptersByBook[
-          targetBookId
-          ] ?? []
-        );
+            chaptersByBook[
+              targetBookId
+            ] ?? []
+          );
 
     const chapterExists =
       availableChapters.some(
@@ -2710,9 +2585,7 @@ function MainAppContent() {
       );
 
     if (!chapterExists) {
-      setTargetChapterId(
-        null
-      );
+      setTargetChapterId(null);
     }
   }, [
     targetBookId,
@@ -2737,11 +2610,8 @@ function MainAppContent() {
   ]);
 
   /**
-   * =========================================================
    * SPLASH
-   * =========================================================
    */
-
   if (
     appStage ===
     "splash"
@@ -2756,11 +2626,8 @@ function MainAppContent() {
   }
 
   /**
-   * =========================================================
    * AUTHENTICATION
-   * =========================================================
    */
-
   if (
     appStage === "auth" ||
     !isAuthenticated
@@ -2777,23 +2644,8 @@ function MainAppContent() {
   }
 
   /**
-   * =========================================================
-   * ROLE-BASED APPLICATION ENTRY
-   * =========================================================
-   *
-   * Ini adalah bagian penting Stage 2.
-   *
-   * role = admin
-   *     -> AdminDashboardView
-   *
-   * role = user
-   *     -> Writer Workspace
-   *
-   * Security tetap berada di backend.
-   * Frontend hanya menentukan UI yang ditampilkan.
-   * =========================================================
+   * ADMIN
    */
-
   if (
     user?.role ===
     "admin"
@@ -2811,11 +2663,8 @@ function MainAppContent() {
   }
 
   /**
-   * =========================================================
    * MAIN WRITER APPLICATION
-   * =========================================================
    */
-
   return (
     <div className="min-h-screen bg-[#121212] text-[#E0E0E0] flex flex-col font-sans selection:bg-[#D4AF37]/25 selection:text-[#FAF7EE]">
       <Navbar
@@ -2832,9 +2681,7 @@ function MainAppContent() {
           setCurrentView(view)
         }
         onOpenSearch={() =>
-          setIsSearchOpen(
-            true
-          )
+          setIsSearchOpen(true)
         }
         onToggleNotes={() =>
           setIsQuickNotesOpen(
@@ -2859,124 +2706,124 @@ function MainAppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {currentView ===
           "workspace" && (
-            <WorkspaceView
-              books={
-                displayBooks
-              }
-              chapters={
-                displayChapters
-              }
-              chaptersByBook={
-                chaptersByBook
-              }
-              loadingByBook={
-                loadingByBook
-              }
-              activeBookId={
-                targetBookId
-              }
-              customGenres={
-                customGenres
-              }
-              userProfile={
-                userProfileForUI
-              }
-              onSaveBook={
-                handleSaveBook
-              }
-              onDeleteBook={
-                handleDeleteBook
-              }
-              onSaveChapter={
-                handleSaveChapter
-              }
-              onDeleteChapter={
-                handleDeleteChapter
-              }
-              onAddCustomGenre={
-                handleAddCustomGenre
-              }
-              onOpenEditor={
-                handleOpenEditor
-              }
-              onSelectBook={(
+          <WorkspaceView
+            books={
+              displayBooks
+            }
+            chapters={
+              displayChapters
+            }
+            chaptersByBook={
+              chaptersByBook
+            }
+            loadingByBook={
+              loadingByBook
+            }
+            activeBookId={
+              targetBookId
+            }
+            customGenres={
+              customGenres
+            }
+            userProfile={
+              userProfileForUI
+            }
+            onSaveBook={
+              handleSaveBook
+            }
+            onDeleteBook={
+              handleDeleteBook
+            }
+            onSaveChapter={
+              handleSaveChapter
+            }
+            onDeleteChapter={
+              handleDeleteChapter
+            }
+            onAddCustomGenre={
+              handleAddCustomGenre
+            }
+            onOpenEditor={
+              handleOpenEditor
+            }
+            onSelectBook={(
+              bookId
+            ) => {
+              setTargetBookId(
                 bookId
-              ) => {
-                setTargetBookId(
-                  bookId
-                );
+              );
 
-                setTargetChapterId(
-                  null
-                );
-              }}
-              onOpenCharactersWiki={() =>
-                setCurrentView(
-                  "characters"
-                )
-              }
-            />
-          )}
+              setTargetChapterId(
+                null
+              );
+            }}
+            onOpenCharactersWiki={() =>
+              setCurrentView(
+                "characters"
+              )
+            }
+          />
+        )}
 
         {currentView ===
           "characters" && (
-            <CharacterWikiView
-              characters={
-                displayCharacters
-              }
-              books={
-                displayBooks
-              }
-              onSaveCharacter={
-                handleSaveCharacter
-              }
-              onDeleteCharacter={
-                handleDeleteCharacter
-              }
-            />
-          )}
+          <CharacterWikiView
+            characters={
+              displayCharacters
+            }
+            books={
+              displayBooks
+            }
+            onSaveCharacter={
+              handleSaveCharacter
+            }
+            onDeleteCharacter={
+              handleDeleteCharacter
+            }
+          />
+        )}
 
         {currentView ===
           "editor" && (
-            <NovelEditorView
-              books={
-                displayBooks
-              }
-              chapters={
-                displayChapters
-              }
-              chaptersByBook={
-                chaptersByBook
-              }
-              initialBookId={
-                activeEditorBookId
-              }
-              initialChapterId={
-                activeEditorChapterId
-              }
-              userProfile={
-                userProfileForUI
-              }
-              onSaveChapter={
-                handleSaveChapter
-              }
-              onSelectBook={(
+          <NovelEditorView
+            books={
+              displayBooks
+            }
+            chapters={
+              displayChapters
+            }
+            chaptersByBook={
+              chaptersByBook
+            }
+            initialBookId={
+              activeEditorBookId
+            }
+            initialChapterId={
+              activeEditorChapterId
+            }
+            userProfile={
+              userProfileForUI
+            }
+            onSaveChapter={
+              handleSaveChapter
+            }
+            onSelectBook={(
+              bookId
+            ) => {
+              setTargetBookId(
                 bookId
-              ) => {
-                setTargetBookId(
-                  bookId
-                );
+              );
 
-                setTargetChapterId(
-                  null
-                );
+              setTargetChapterId(
+                null
+              );
 
-                setCurrentView(
-                  "workspace"
-                );
-              }}
-            />
-          )}
+              setCurrentView(
+                "workspace"
+              );
+            }}
+          />
+        )}
       </main>
 
       <footer className="h-10 bg-[#1E1E2E] border-t border-[#2A2A3C] flex items-center justify-between px-4 sm:px-8 text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 shrink-0">
@@ -3038,28 +2885,49 @@ function MainAppContent() {
       />
 
       <GlobalSearchModal
-        isOpen={isSearchOpen}
-        books={displayBooks}
-        chapters={displayChapters}
-        characters={displayCharacters}
-        notes={displayQuickNotes}
+        isOpen={
+          isSearchOpen
+        }
+        books={
+          displayBooks
+        }
+        chapters={
+          displayChapters
+        }
+        characters={
+          displayCharacters
+        }
+        notes={
+          displayQuickNotes
+        }
         onClose={() => {
           setIsSearchOpen(false);
         }}
         onSelectBook={(bId) => {
           setTargetBookId(bId);
-          setCurrentView('workspace');
+          setCurrentView(
+            "workspace"
+          );
         }}
-        onSelectChapter={(bId, cId) => {
+        onSelectChapter={(
+          bId,
+          cId
+        ) => {
           setTargetBookId(bId);
           setTargetChapterId(cId);
-          setCurrentView('editor');
+          setCurrentView(
+            "editor"
+          );
         }}
         onSelectCharacter={() => {
-          setCurrentView('characters');
+          setCurrentView(
+            "characters"
+          );
         }}
         onSelectNote={() => {
-          setIsQuickNotesOpen(true);
+          setIsQuickNotesOpen(
+            true
+          );
         }}
       />
 
@@ -3093,7 +2961,9 @@ function MainAppContent() {
             false
           )
         }
-        onSaveProfile={async (updatedProfile) => {
+        onSaveProfile={async (
+          updatedProfile
+        ) => {
           await apiRequest<{
             success: boolean;
             message?: string;
@@ -3101,14 +2971,22 @@ function MainAppContent() {
           }>("/users/me", {
             method: "PATCH",
             body: JSON.stringify({
-              authorName: updatedProfile.authorName,
-              penName: updatedProfile.penName,
-              bio: updatedProfile.bio,
-              avatarUrl: updatedProfile.avatarUrl,
-              dailyWordGoal: updatedProfile.dailyWordGoal,
-              theme: updatedProfile.theme,
-              soundEffects: updatedProfile.soundEffects,
-              preferredGenre: updatedProfile.preferredGenre,
+              authorName:
+                updatedProfile.authorName,
+              penName:
+                updatedProfile.penName,
+              bio:
+                updatedProfile.bio,
+              avatarUrl:
+                updatedProfile.avatarUrl,
+              dailyWordGoal:
+                updatedProfile.dailyWordGoal,
+              theme:
+                updatedProfile.theme,
+              soundEffects:
+                updatedProfile.soundEffects,
+              preferredGenre:
+                updatedProfile.preferredGenre,
             }),
           });
 
