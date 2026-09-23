@@ -7,6 +7,7 @@ import React, {
 
 import {
   CharacterWiki,
+  CharacterMention,
 } from "../types";
 
 import {
@@ -14,6 +15,7 @@ import {
   RelationshipInput,
   CustomAttributeInput,
   CharacterMentionInput,
+  CharacterMentionUpdateInput,
 
   getCharacters,
   createCharacter,
@@ -30,6 +32,7 @@ import {
 
   getMentions,
   createMention,
+  updateMention,
   deleteMention,
 } from "../services/character.service";
 
@@ -88,7 +91,7 @@ interface CharacterContextValue {
     attributeId: string
   ) => Promise<void>;
 
-  mentions: any[];
+  mentions: CharacterMention[];
 
   refreshMentions: (
     bookId: string,
@@ -99,7 +102,14 @@ interface CharacterContextValue {
     bookId: string,
     chapterId: string,
     input: CharacterMentionInput
-  ) => Promise<void>;
+  ) => Promise<CharacterMention>;
+
+  editMention: (
+    bookId: string,
+    chapterId: string,
+    mentionId: string,
+    input: CharacterMentionUpdateInput
+  ) => Promise<CharacterMention>;
 
   removeMention: (
     bookId: string,
@@ -126,7 +136,7 @@ export const CharacterProvider: React.FC<{
     useState<string | null>(null);
 
   const [mentions, setMentions] =
-    useState<any[]>([]);
+    useState<CharacterMention[]>([]);
 
   const refreshCharacters =
     useCallback(async (bookId?: string) => {
@@ -366,6 +376,37 @@ export const CharacterProvider: React.FC<{
           ...prev,
           mention,
         ]);
+
+        return mention;
+      },
+      []
+    );
+
+  const editMention =
+    useCallback(
+      async (
+        bookId: string,
+        chapterId: string,
+        mentionId: string,
+        input: CharacterMentionUpdateInput
+      ) => {
+        const mention =
+          await updateMention(
+            bookId,
+            chapterId,
+            mentionId,
+            input
+          );
+
+        setMentions((prev) =>
+          prev.map((item) =>
+            item.id === mentionId
+              ? mention
+              : item
+          )
+        );
+
+        return mention;
       },
       []
     );
@@ -416,6 +457,7 @@ export const CharacterProvider: React.FC<{
         mentions,
         refreshMentions,
         addMention,
+        editMention,
         removeMention,
       }}
     >

@@ -258,6 +258,13 @@ export interface CharacterMentionInput {
   endOffset?: number;
 }
 
+export interface CharacterMentionUpdateInput {
+  characterId?: string;
+  displayText?: string;
+  startOffset?: number | null;
+  endOffset?: number | null;
+}
+
 export async function getMentions(
   bookId: string,
   chapterId: string
@@ -276,6 +283,21 @@ export async function createMention(
     `/books/${bookId}/chapters/${chapterId}/mentions`,
     {
       method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+export async function updateMention(
+  bookId: string,
+  chapterId: string,
+  mentionId: string,
+  input: CharacterMentionUpdateInput
+) {
+  return apiRequest<any>(
+    `/books/${bookId}/chapters/${chapterId}/mentions/${mentionId}`,
+    {
+      method: "PATCH",
       body: JSON.stringify(input),
     }
   );

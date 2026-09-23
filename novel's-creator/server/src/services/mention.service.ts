@@ -173,6 +173,106 @@ export async function createMention(
   return result.rows[0];
 }
 
+export async function updateMention(
+  bookId: string,
+  chapterId: string,
+  mentionId: string,
+  userId: string,
+  input: {
+    characterId?: string;
+    displayText?: string;
+    startOffset?: number | null;
+    endOffset?: number | null;
+  }
+) {
+  const chapterOwned =
+    await verifyChapterOwnership(
+      chapterId,
+      bookId,
+      userId
+    );
+
+  if (!chapterOwned) {
+    return null;
+  }
+
+  const existing = await pool.query(
+    `
+    SELECT
+      m.id,
+      m.character_id
+    FROM chapter_character_mentions m
+    WHERE m.id = $1
+      AND m.chapter_id = $2
+    `,
+    [mentionId, chapterId]
+  );
+
+  if (existing.rowCount === 0) {
+    return null;
+  }
+
+  const nextCharacterId =
+    input.characterId ??
+    existing.rows[0].character_id;
+
+  const characterOwned =
+    await verifyCharacterOwnership(
+      nextCharacterId,
+      userId
+    );
+
+  if (!characterOwned) {
+    throw new Error(
+      "CHARACTER_NOT_OWNED"
+    );
+  }
+
+  const characterInBook =
+    await verifyCharacterInBook(
+      nextCharacterId,
+      bookId
+    );
+
+  if (!characterInBook) {
+    throw new Error(
+      "CHARACTER_NOT_IN_BOOK"
+    );
+  }
+
+  const result = await pool.query(
+    `
+    UPDATE chapter_character_mentions
+    SET
+      character_id = $1,
+      display_text = COALESCE($2, display_text),
+      start_offset = CASE
+        WHEN $3::integer IS NULL
+        THEN start_offset
+        ELSE $3
+      END,
+      end_offset = CASE
+        WHEN $4::integer IS NULL
+        THEN end_offset
+        ELSE $4
+      END
+    WHERE id = $5
+      AND chapter_id = $6
+    RETURNING *
+    `,
+    [
+      nextCharacterId,
+      input.displayText ?? null,
+      input.startOffset ?? null,
+      input.endOffset ?? null,
+      mentionId,
+      chapterId,
+    ]
+  );
+
+  return result.rows[0];
+}
+
 export async function deleteMention(
   mentionId: string,
   userId: string
