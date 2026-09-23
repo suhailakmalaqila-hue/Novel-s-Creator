@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   CharacterWiki,
   RoleTag,
@@ -107,6 +107,30 @@ export const CharacterFormModal: React.FC<CharacterFormModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sinkronkan ulang state form setiap kali modal dibuka
+  // atau karakter yang sedang diedit berubah.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setFullName(initialCharacter?.fullName || '');
+    setAlias(initialCharacter?.alias || '');
+    setAge(initialCharacter?.age || '');
+    setGender(initialCharacter?.gender || '');
+    setRoleTag(initialCharacter?.roleTag || 'Protagonis');
+    setStatus(initialCharacter?.status || 'Hidup');
+    setAvatarUrl(initialCharacter?.avatarUrl || '');
+    setPhysicalAppearance(initialCharacter?.physicalAppearance || '');
+    setPersonalityTraits(initialCharacter?.personalityTraits || '');
+    setBackstory(initialCharacter?.backstory || '');
+    setMotivation(initialCharacter?.motivation || '');
+    setWorldGoal(initialCharacter?.worldGoal || '');
+    setCustomAttributes(initialCharacter?.customAttributes || []);
+    setRelationships(initialCharacter?.relationships || []);
+    setSelectedBookIds(initialCharacter?.bookIds || []);
+    setActiveTab('basic');
+    setErrorMsg(null);
+  }, [isOpen, initialCharacter]);
+
   if (!isOpen) return null;
 
   // Avatar upload via FileReader base64
@@ -209,7 +233,7 @@ export const CharacterFormModal: React.FC<CharacterFormModalProps> = ({
     );
 
     const characterData: CharacterWiki = {
-      id: initialCharacter ? initialCharacter.id : 'char_' + Date.now(),
+      id: initialCharacter?.id || '',
       fullName: fullName.trim(),
       alias: alias.trim(),
       age: age.trim(),
