@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { CharacterWiki, Book, RoleTag, CharacterStatus } from '../../types';
+import {
+  CharacterWiki,
+  Book,
+  RoleTag,
+  CharacterStatus,
+} from '../../types';
 import { CharacterFormModal } from './CharacterFormModal';
 import { CharacterDetailModal } from './CharacterDetailModal';
 import { RelationshipGraphModal } from './RelationshipGraphModal';
@@ -8,14 +13,11 @@ import {
   Plus,
   Search,
   User,
-  Shield,
   Heart,
   Trash2,
   Edit3,
   Network,
-  Tag,
   Filter,
-  Sparkles,
 } from 'lucide-react';
 
 interface CharacterWikiViewProps {
@@ -42,83 +44,206 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
   onDeleteCharacter,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<RoleTag | 'all'>('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
-  const [selectedBookFilter, setSelectedBookFilter] = useState<string>('all');
+  const [selectedRoleFilter, setSelectedRoleFilter] =
+    useState<RoleTag | 'all'>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] =
+    useState<string>('all');
+  const [selectedBookFilter, setSelectedBookFilter] =
+    useState<string>('all');
 
   // Modals state
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingCharacter, setEditingCharacter] = useState<CharacterWiki | null>(null);
+  const [editingCharacter, setEditingCharacter] =
+    useState<CharacterWiki | null>(null);
 
-  const [detailCharacter, setDetailCharacter] = useState<CharacterWiki | null>(null);
-  const [isGraphModalOpen, setIsGraphModalOpen] = useState(false);
+  const [detailCharacter, setDetailCharacter] =
+    useState<CharacterWiki | null>(null);
 
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isGraphModalOpen, setIsGraphModalOpen] =
+    useState(false);
 
-  // Filtered list
+  const [deleteConfirmId, setDeleteConfirmId] =
+    useState<string | null>(null);
+
+  /**
+   * =========================================================
+   * RELATIONSHIP HELPERS
+   * =========================================================
+   *
+   * Database menyimpan relationship secara directional:
+   *
+   * A -> B
+   *
+   * Artinya relationship tersebut berada di:
+   * A.relationships
+   *
+   * tetapi B juga mempunyai koneksi relationship tersebut
+   * sebagai incoming relationship.
+   *
+   * Kita TIDAK memasukkan incoming relationship ke
+   * char.relationships karena array tersebut dipakai oleh
+   * CharacterFormModal untuk operasi edit/delete.
+   *
+   * Jadi helper ini hanya digunakan untuk DISPLAY COUNT.
+   */
+
+  const getRelationshipCount = (characterId: string): number => {
+    const character = characters.find(
+      (item) => item.id === characterId
+    );
+
+    if (!character) {
+      return 0;
+    }
+
+    // Relationship yang dibuat oleh karakter ini:
+    const outgoingCount =
+      character.relationships?.length || 0;
+
+    // Relationship karakter lain yang menunjuk ke karakter ini:
+    const incomingCount = characters.reduce(
+      (total, otherCharacter) => {
+        if (otherCharacter.id === characterId) {
+          return total;
+        }
+
+        const incomingForThisCharacter =
+          otherCharacter.relationships?.filter(
+            (relationship) =>
+              relationship.targetCharacterId === characterId
+          ).length || 0;
+
+        return total + incomingForThisCharacter;
+      },
+      0
+    );
+
+    return outgoingCount + incomingCount;
+  };
+
+  /**
+   * =========================================================
+   * FILTERED CHARACTER LIST
+   * =========================================================
+   */
+
   const filteredCharacters = characters.filter((char) => {
+    const normalizedSearchQuery =
+      searchQuery.toLowerCase();
+
     const matchesSearch =
-      char.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      char.alias.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      char.physicalAppearance.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      char.personalityTraits.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      char.backstory.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      char.fullName
+        .toLowerCase()
+        .includes(normalizedSearchQuery) ||
+      char.alias
+        .toLowerCase()
+        .includes(normalizedSearchQuery) ||
+      char.physicalAppearance
+        .toLowerCase()
+        .includes(normalizedSearchQuery) ||
+      char.personalityTraits
+        .toLowerCase()
+        .includes(normalizedSearchQuery) ||
+      char.backstory
+        .toLowerCase()
+        .includes(normalizedSearchQuery) ||
       char.customAttributes.some(
         (a) =>
-          a.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          a.value.toLowerCase().includes(searchQuery.toLowerCase())
+          a.key
+            .toLowerCase()
+            .includes(normalizedSearchQuery) ||
+          a.value
+            .toLowerCase()
+            .includes(normalizedSearchQuery)
       );
 
     const matchesRole =
-      selectedRoleFilter === 'all' || char.roleTag === selectedRoleFilter;
+      selectedRoleFilter === 'all' ||
+      char.roleTag === selectedRoleFilter;
 
     const matchesStatus =
-      selectedStatusFilter === 'all' || char.status === selectedStatusFilter;
+      selectedStatusFilter === 'all' ||
+      char.status === selectedStatusFilter;
 
     const matchesBook =
-      selectedBookFilter === 'all' || (char.bookIds && char.bookIds.includes(selectedBookFilter));
+      selectedBookFilter === 'all' ||
+      (char.bookIds &&
+        char.bookIds.includes(selectedBookFilter));
 
-    return matchesSearch && matchesRole && matchesStatus && matchesBook;
+    return (
+      matchesSearch &&
+      matchesRole &&
+      matchesStatus &&
+      matchesBook
+    );
   });
+
+  /**
+   * =========================================================
+   * CHARACTER ACTIONS
+   * =========================================================
+   */
 
   const handleOpenNewCharacter = () => {
     setEditingCharacter(null);
     setIsFormOpen(true);
   };
 
-  const handleOpenEditCharacter = (char: CharacterWiki, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const handleOpenEditCharacter = (
+    char: CharacterWiki,
+    e?: React.MouseEvent
+  ) => {
+    if (e) {
+      e.stopPropagation();
+    }
+
     setEditingCharacter(char);
     setIsFormOpen(true);
   };
 
   const handleConfirmDelete = () => {
-    if (!deleteConfirmId) return;
+    if (!deleteConfirmId) {
+      return;
+    }
+
     onDeleteCharacter(deleteConfirmId);
+
     if (detailCharacter?.id === deleteConfirmId) {
       setDetailCharacter(null);
     }
+
     setDeleteConfirmId(null);
   };
 
   return (
     <div className="space-y-8">
-      {/* Top Bold Typography Header */}
-      <header className="mb-2 sm:mb-4" data-tour="character-wiki-header">
+      {/* =====================================================
+          HEADER
+          ===================================================== */}
+
+      <header
+        className="mb-2 sm:mb-4"
+        data-tour="character-wiki-header"
+      >
         <div className="text-[#D4AF37] text-xs sm:text-sm uppercase tracking-[0.3em] font-bold mb-2 flex items-center gap-2">
           <span>Database Karakter</span>
+
           <span className="w-8 h-px bg-[#D4AF37]/40" />
+
           <span className="text-[10px] font-mono text-[#8E8EA4] tracking-normal">
             ({characters.length} Profil Terdaftar)
           </span>
         </div>
+
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <h2 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-light italic leading-tight text-[#FAF7EE]">
               Wiki Tokoh & Relasi
             </h2>
+
             <p className="text-xs sm:text-sm text-[#9E9EB2] mt-1.5 uppercase tracking-widest font-medium">
-              Arsitektur tokoh cerita, atribut kustom, latar belakang, & relasi visual
+              Arsitektur tokoh cerita, atribut kustom, latar
+              belakang, & relasi visual
             </p>
           </div>
 
@@ -130,8 +255,10 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
               className="py-2.5 px-4 bg-[#1E1E2E] hover:bg-[#282840] text-[#D4AF37] border border-[#D4AF37]/40 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-sm"
             >
               <Network className="w-4 h-4" />
+
               <span>Matriks Relasi</span>
             </button>
+
             <button
               id="btn-add-character-wiki"
               data-tour="add-character-btn"
@@ -139,22 +266,32 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
               className="bg-[#D4AF37] text-[#121212] px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm uppercase tracking-wider hover:bg-white transition-all shadow-[0_0_20px_rgba(212,175,55,0.25)] flex items-center gap-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
+
               <span>Tambah Karakter</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Search & Filter Bar */}
+      {/* =====================================================
+          SEARCH & FILTER BAR
+          ===================================================== */}
+
       {characters.length > 0 && (
-        <div className="space-y-3 bg-[#181826] border border-[#2A2A3C] p-4 rounded-2xl" data-tour="character-filter-bar">
+        <div
+          className="space-y-3 bg-[#181826] border border-[#2A2A3C] p-4 rounded-2xl"
+          data-tour="character-filter-bar"
+        >
           <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
             <div className="relative w-full sm:w-80">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#7E7E94]" />
+
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) =>
+                  setSearchQuery(e.target.value)
+                }
                 placeholder="Cari nama, alias, atribut, sifat, backstory..."
                 className="w-full pl-9 pr-3 py-2 bg-[#141420] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs text-[#E0E0E0] outline-none"
               />
@@ -163,26 +300,41 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <select
                 value={selectedStatusFilter}
-                onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                onChange={(e) =>
+                  setSelectedStatusFilter(e.target.value)
+                }
                 className="px-3 py-2 bg-[#141420] border border-[#2A2A3C] rounded-xl text-xs text-[#C8C8DC] outline-none cursor-pointer uppercase tracking-wider text-[10px] font-bold"
               >
-                <option value="all">Semua Status</option>
+                <option value="all">
+                  Semua Status
+                </option>
+
                 <option value="Hidup">Hidup</option>
                 <option value="Mati">Mati</option>
                 <option value="Hilang">Hilang</option>
                 <option value="Disegel">Disegel</option>
-                <option value="Reinkarnasi">Reinkarnasi</option>
+                <option value="Reinkarnasi">
+                  Reinkarnasi
+                </option>
               </select>
 
               {books.length > 0 && (
                 <select
                   value={selectedBookFilter}
-                  onChange={(e) => setSelectedBookFilter(e.target.value)}
+                  onChange={(e) =>
+                    setSelectedBookFilter(e.target.value)
+                  }
                   className="px-3 py-2 bg-[#141420] border border-[#2A2A3C] rounded-xl text-xs text-[#C8C8DC] outline-none cursor-pointer uppercase tracking-wider text-[10px] font-bold"
                 >
-                  <option value="all">Semua Buku</option>
+                  <option value="all">
+                    Semua Buku
+                  </option>
+
                   {books.map((b) => (
-                    <option key={b.id} value={b.id}>
+                    <option
+                      key={b.id}
+                      value={b.id}
+                    >
                       {b.title}
                     </option>
                   ))}
@@ -194,26 +346,36 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
           {/* Role Tag Filter Pills */}
           <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#242436]">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#7E7E94] mr-1 flex items-center gap-1">
-              <Filter className="w-3 h-3" /> Peran:
+              <Filter className="w-3 h-3" />
+
+              Peran:
             </span>
+
             {ROLE_FILTERS.map((role) => (
               <button
                 key={role}
-                onClick={() => setSelectedRoleFilter(role)}
+                onClick={() =>
+                  setSelectedRoleFilter(role)
+                }
                 className={`py-1 px-3 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                   selectedRoleFilter === role
                     ? 'bg-[#D4AF37] text-[#121212] shadow-sm'
                     : 'bg-[#141420] text-[#9E9EB2] hover:text-[#FAF7EE] border border-[#242436]'
                 }`}
               >
-                {role === 'all' ? 'Semua Peran' : role}
+                {role === 'all'
+                  ? 'Semua Peran'
+                  : role}
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* STRICT ZERO DUMMY DATA EMPTY STATE */}
+      {/* =====================================================
+          EMPTY STATE
+          ===================================================== */}
+
       {characters.length === 0 ? (
         <div
           id="empty-characters-state"
@@ -222,12 +384,17 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
           <div className="w-20 h-20 border border-[#D4AF37]/30 rounded-full flex items-center justify-center mb-6 bg-[#1E1E2E] shadow-[0_0_15px_rgba(212,175,55,0.15)]">
             <Users className="w-8 h-8 text-[#D4AF37]" />
           </div>
+
           <p className="text-2xl sm:text-3xl font-serif mb-2 italic text-[#FAF7EE]">
             Belum ada karakter wiki.
           </p>
+
           <p className="text-[#D4AF37]/70 text-xs sm:text-sm max-w-md uppercase tracking-widest leading-loose mb-6">
-            Database karakter masih kosong. Rancang protagonis, antagonis, dan relasi tokoh Anda sekarang.
+            Database karakter masih kosong. Rancang
+            protagonis, antagonis, dan relasi tokoh Anda
+            sekarang.
           </p>
+
           <button
             id="btn-empty-add-character"
             data-tour="add-character-btn"
@@ -235,12 +402,17 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
             className="bg-[#D4AF37] text-[#121212] px-8 py-3 rounded-xl font-bold text-xs sm:text-sm uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_20px_rgba(212,175,55,0.25)] cursor-pointer flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
+
             <span>Tambah Karakter</span>
           </button>
         </div>
       ) : filteredCharacters.length === 0 ? (
         <div className="py-12 text-center text-[#8E8EA4] bg-[#181826] border border-[#2A2A3C] rounded-2xl">
-          <p className="font-serif italic text-lg text-[#FAF7EE]">Tidak ada karakter yang cocok dengan kriteria filter saat ini.</p>
+          <p className="font-serif italic text-lg text-[#FAF7EE]">
+            Tidak ada karakter yang cocok dengan
+            kriteria filter saat ini.
+          </p>
+
           <button
             onClick={() => {
               setSearchQuery('');
@@ -254,12 +426,20 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
           </button>
         </div>
       ) : (
-        /* CHARACTER CARDS GRID */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-tour="character-cards-grid">
+        /* ===================================================
+           CHARACTER CARDS GRID
+           =================================================== */
+
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+          data-tour="character-cards-grid"
+        >
           {filteredCharacters.map((char) => (
             <div
               key={char.id}
-              onClick={() => setDetailCharacter(char)}
+              onClick={() =>
+                setDetailCharacter(char)
+              }
               className="bg-[#1E1E2E] hover:bg-[#222236] border border-[#2A2A3C] hover:border-[#D4AF37]/50 rounded-2xl p-5 shadow-lg flex flex-col justify-between transition-all duration-200 cursor-pointer group relative overflow-hidden"
             >
               <div>
@@ -276,7 +456,10 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-[#6E6E85] p-2 text-center">
                         <User className="w-7 h-7 mb-1 text-[#D4AF37]/40" />
-                        <span className="text-[8px] uppercase text-[#8A8A9E]">Tokoh</span>
+
+                        <span className="text-[8px] uppercase text-[#8A8A9E]">
+                          Tokoh
+                        </span>
                       </div>
                     )}
                   </div>
@@ -287,6 +470,7 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
                       <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30">
                         {char.roleTag}
                       </span>
+
                       <span className="text-[10px] text-[#8E8EA4] font-mono">
                         {char.status}
                       </span>
@@ -295,6 +479,7 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
                     <h3 className="font-editorial text-lg font-bold text-[#FAF7EE] group-hover:text-[#D4AF37] transition-colors truncate">
                       {char.fullName}
                     </h3>
+
                     {char.alias && (
                       <p className="text-xs text-[#A8A8C0] truncate italic">
                         "{char.alias}"
@@ -302,9 +487,17 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
                     )}
 
                     <div className="flex items-center gap-2 text-[11px] text-[#7E7E94] mt-1">
-                      {char.age && <span>{char.age}</span>}
-                      {char.age && char.gender && <span>•</span>}
-                      {char.gender && <span>{char.gender}</span>}
+                      {char.age && (
+                        <span>{char.age}</span>
+                      )}
+
+                      {char.age && char.gender && (
+                        <span>•</span>
+                      )}
+
+                      {char.gender && (
+                        <span>{char.gender}</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -318,40 +511,60 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
                 </p>
 
                 {/* Custom Attributes Preview */}
-                {char.customAttributes && char.customAttributes.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {char.customAttributes.slice(0, 2).map((attr) => (
-                      <span
-                        key={attr.id}
-                        className="text-[10px] text-[#D4AF37] bg-[#161624] px-2 py-0.5 rounded border border-[#2A2A3C] truncate max-w-[140px]"
-                      >
-                        {attr.key}: {attr.value}
-                      </span>
-                    ))}
-                    {char.customAttributes.length > 2 && (
-                      <span className="text-[10px] text-[#7A7A8E] bg-[#161624] px-1.5 py-0.5 rounded border border-[#2A2A3C]">
-                        +{char.customAttributes.length - 2} atribut
-                      </span>
-                    )}
-                  </div>
-                )}
+                {char.customAttributes &&
+                  char.customAttributes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {char.customAttributes
+                        .slice(0, 2)
+                        .map((attr) => (
+                          <span
+                            key={attr.id}
+                            className="text-[10px] text-[#D4AF37] bg-[#161624] px-2 py-0.5 rounded border border-[#2A2A3C] truncate max-w-[140px]"
+                          >
+                            {attr.key}: {attr.value}
+                          </span>
+                        ))}
+
+                      {char.customAttributes.length >
+                        2 && (
+                        <span className="text-[10px] text-[#7A7A8E] bg-[#161624] px-1.5 py-0.5 rounded border border-[#2A2A3C]">
+                          +
+                          {char.customAttributes.length -
+                            2}{' '}
+                          atribut
+                        </span>
+                      )}
+                    </div>
+                  )}
               </div>
 
-              {/* Bottom Actions & Relational Count */}
+              {/* =================================================
+                  BOTTOM ACTIONS & RELATIONAL COUNT
+                  ================================================= */}
+
               <div className="pt-3 border-t border-[#262638] flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs text-[#8E8EA4]">
                   <Heart className="w-3.5 h-3.5 text-[#D4AF37]" />
-                  <span>{char.relationships?.length || 0} Relasi</span>
+
+                  <span>
+                    {getRelationshipCount(char.id)} Relasi
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={(e) => handleOpenEditCharacter(char, e)}
+                    onClick={(e) =>
+                      handleOpenEditCharacter(
+                        char,
+                        e
+                      )
+                    }
                     className="p-1.5 text-[#8E8EA4] hover:text-[#FAF7EE] hover:bg-[#2A2A3E] rounded-lg transition-colors cursor-pointer"
                     title="Edit Profil"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
+
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -369,7 +582,10 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
         </div>
       )}
 
-      {/* MODALS */}
+      {/* =====================================================
+          FORM MODAL
+          ===================================================== */}
+
       <CharacterFormModal
         isOpen={isFormOpen}
         initialCharacter={editingCharacter}
@@ -381,6 +597,10 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
           setIsFormOpen(false);
         }}
       />
+
+      {/* =====================================================
+          DETAIL MODAL
+          ===================================================== */}
 
       <CharacterDetailModal
         isOpen={!!detailCharacter}
@@ -394,35 +614,52 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
         }}
       />
 
+      {/* =====================================================
+          RELATIONSHIP GRAPH
+          ===================================================== */}
+
       <RelationshipGraphModal
         isOpen={isGraphModalOpen}
         characters={characters}
         onClose={() => setIsGraphModalOpen(false)}
-        onSelectCharacter={(char) => setDetailCharacter(char)}
+        onSelectCharacter={(char) =>
+          setDetailCharacter(char)
+        }
       />
 
-      {/* Delete Confirmation Modal */}
+      {/* =====================================================
+          DELETE CONFIRMATION MODAL
+          ===================================================== */}
+
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-[#1E1E2E] border border-red-900/50 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
             <div className="w-12 h-12 rounded-full bg-red-950/60 border border-red-800 text-red-400 mx-auto flex items-center justify-center">
               <Trash2 className="w-6 h-6" />
             </div>
+
             <div>
               <h3 className="font-editorial text-lg font-bold text-[#FAF7EE]">
                 Hapus Karakter Wiki?
               </h3>
+
               <p className="text-xs text-[#9E9EB2] mt-1">
-                Data profil, atribut kustom, dan seluruh tautan relasi karakter ini akan dihapus permanen.
+                Data profil, atribut kustom, dan seluruh
+                tautan relasi karakter ini akan dihapus
+                permanen.
               </p>
             </div>
+
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
-                onClick={() => setDeleteConfirmId(null)}
+                onClick={() =>
+                  setDeleteConfirmId(null)
+                }
                 className="py-2 px-4 bg-[#252538] hover:bg-[#32324C] text-xs font-semibold text-[#C0C0D4] rounded-xl cursor-pointer"
               >
                 Batal
               </button>
+
               <button
                 onClick={handleConfirmDelete}
                 className="py-2 px-4 bg-red-600 hover:bg-red-700 text-xs font-semibold text-white rounded-xl shadow-lg cursor-pointer"
