@@ -13,9 +13,19 @@ import {
   ChapterSnapshot,
   SaveStatus,
   UserAuthorProfile,
+  CharacterMention,
+  CharacterWiki,
 } from '../../types';
 
-import { countWords, countCharacters } from '../../lib/storage';
+import { useCharacters } from '../../contexts/CharacterContext';
+
+import CharacterMentionPicker from './CharacterMentionPicker';
+import CharacterMentionPanel from './CharacterMentionPanel';
+
+import {
+  countWords,
+  countCharacters,
+} from '../../lib/storage';
 
 import { useChapters } from '../../contexts/ChapterContext';
 
@@ -37,20 +47,31 @@ import {
   Clock,
   RotateCcw,
   X,
+  AtSign,
+  PanelRight,
 } from 'lucide-react';
 
 interface NovelEditorViewProps {
   books: Book[];
   chapters: Chapter[];
-  chaptersByBook: Record<string, Chapter[]>;
+  chaptersByBook: Record<
+    string,
+    Chapter[]
+  >;
   initialBookId?: string | null;
   initialChapterId?: string | null;
   userProfile: UserAuthorProfile | null;
-  onSaveChapter: (chapter: Chapter) => void | Promise<void>;
-  onSelectBook: (bookId: string) => void;
+  onSaveChapter: (
+    chapter: Chapter
+  ) => void | Promise<void>;
+  onSelectBook: (
+    bookId: string
+  ) => void;
 }
 
-export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
+export const NovelEditorView: React.FC<
+  NovelEditorViewProps
+> = ({
   books,
   chapters,
   chaptersByBook,
@@ -70,21 +91,41 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     addSnapshot,
   } = useChapters();
 
+  const {
+    characters,
+    mentions,
+    refreshCharacters,
+    refreshMentions,
+    addMention,
+    editMention,
+    removeMention,
+  } = useCharacters();
+
   /*
    * ============================================================
    * SELECTED BOOK & CHAPTER
    * ============================================================
    */
 
-  const resolvedInitialBookId = useMemo(() => {
-    if (initialBookId && books.some((book) => book.id === initialBookId)) {
-      return initialBookId;
-    }
+  const resolvedInitialBookId =
+    useMemo(() => {
+      if (
+        initialBookId &&
+        books.some(
+          (book) =>
+            book.id === initialBookId
+        )
+      ) {
+        return initialBookId;
+      }
 
-    return books[0]?.id || '';
-  }, [initialBookId, books]);
+      return books[0]?.id || '';
+    }, [initialBookId, books]);
 
-  const [selectedBookId, setSelectedBookId] = useState<string>(
+  const [
+    selectedBookId,
+    setSelectedBookId,
+  ] = useState<string>(
     resolvedInitialBookId
   );
 
@@ -94,121 +135,197 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       return;
     }
 
-    setSelectedBookId((currentBookId) => {
-      if (currentBookId === resolvedInitialBookId) {
-        return currentBookId;
-      }
+    setSelectedBookId(
+      (currentBookId) => {
+        if (
+          currentBookId ===
+          resolvedInitialBookId
+        ) {
+          return currentBookId;
+        }
 
-      return resolvedInitialBookId;
-    });
+        return resolvedInitialBookId;
+      }
+    );
   }, [resolvedInitialBookId]);
 
-  const availableChapters = useMemo(() => {
-    if (!selectedBookId) {
-      return [];
-    }
+  const availableChapters =
+    useMemo(() => {
+      if (!selectedBookId) {
+        return [];
+      }
 
-    return [...(chaptersByBook[selectedBookId] ?? [])].sort(
-      (a, b) => a.order - b.order
-    );
-  }, [chaptersByBook, selectedBookId]);
+      return [
+        ...(chaptersByBook[
+          selectedBookId
+        ] ?? []),
+      ].sort(
+        (a, b) =>
+          a.order - b.order
+      );
+    }, [
+      chaptersByBook,
+      selectedBookId,
+    ]);
 
-  const resolvedInitialChapterId = useMemo(() => {
-    if (
-      initialChapterId &&
-      availableChapters.some((chapter) => chapter.id === initialChapterId)
-    ) {
-      return initialChapterId;
-    }
+  const resolvedInitialChapterId =
+    useMemo(() => {
+      if (
+        initialChapterId &&
+        availableChapters.some(
+          (chapter) =>
+            chapter.id ===
+            initialChapterId
+        )
+      ) {
+        return initialChapterId;
+      }
 
-    return availableChapters[0]?.id || '';
-  }, [initialChapterId, availableChapters]);
+      return (
+        availableChapters[0]?.id ||
+        ''
+      );
+    }, [
+      initialChapterId,
+      availableChapters,
+    ]);
 
-  const [selectedChapterId, setSelectedChapterId] = useState<string>(
+  const [
+    selectedChapterId,
+    setSelectedChapterId,
+  ] = useState<string>(
     resolvedInitialChapterId
   );
 
   useEffect(() => {
-    setSelectedChapterId((currentChapterId) => {
+    setSelectedChapterId(
+      (currentChapterId) => {
+        if (
+          currentChapterId &&
+          availableChapters.some(
+            (chapter) =>
+              chapter.id ===
+              currentChapterId
+          )
+        ) {
+          return currentChapterId;
+        }
+
+        return resolvedInitialChapterId;
+      }
+    );
+  }, [
+    availableChapters,
+    resolvedInitialChapterId,
+  ]);
+
+  const activeChapter =
+    useMemo(() => {
       if (
-        currentChapterId &&
-        availableChapters.some(
-          (chapter) => chapter.id === currentChapterId
-        )
+        !selectedBookId ||
+        !selectedChapterId
       ) {
-        return currentChapterId;
+        return null;
       }
 
-      return resolvedInitialChapterId;
-    });
-  }, [availableChapters, resolvedInitialChapterId]);
-
-  const activeChapter = useMemo(() => {
-    if (!selectedBookId || !selectedChapterId) {
-      return null;
-    }
-
-    return (
-      (chaptersByBook[selectedBookId] ?? []).find(
-        (chapter) => chapter.id === selectedChapterId
-      ) || null
-    );
-  }, [chaptersByBook, selectedBookId, selectedChapterId]);
-
-  /*
-   * Snapshot selalu di-scope berdasarkan:
-   * bookId + chapterId.
-   *
-   * Jangan menggunakan flattened snapshots karena itu dapat
-   * mencampurkan history antar chapter ketika user berpindah
-   * buku/chapter dengan cepat.
-   */
-  const snapshotKey = activeChapter
-    ? `${activeChapter.bookId}:${activeChapter.id}`
-    : "";
-
-  const activeSnapshots = snapshotKey
-    ? snapshotsByChapter[snapshotKey] ?? []
-    : [];
-
-  const activeSnapshotsLoading = snapshotKey
-    ? Boolean(
-        snapshotsLoadingByChapter[snapshotKey]
-      )
-    : false;
+      return (
+        (
+          chaptersByBook[
+            selectedBookId
+          ] ?? []
+        ).find(
+          (chapter) =>
+            chapter.id ===
+            selectedChapterId
+        ) || null
+      );
+    }, [
+      chaptersByBook,
+      selectedBookId,
+      selectedChapterId,
+    ]);
 
   /*
-   * Sinkronisasi target dari App -> Editor.
+   * ============================================================
+   * SNAPSHOT
+   * ============================================================
    */
+
+  const snapshotKey =
+    activeChapter
+      ? `${activeChapter.bookId}:${activeChapter.id}`
+      : '';
+
+  const activeSnapshots =
+    snapshotKey
+      ? snapshotsByChapter[
+          snapshotKey
+        ] ?? []
+      : [];
+
+  const activeSnapshotsLoading =
+    snapshotKey
+      ? Boolean(
+          snapshotsLoadingByChapter[
+            snapshotKey
+          ]
+        )
+      : false;
+
+  /*
+   * ============================================================
+   * SYNC TARGET APP -> EDITOR
+   * ============================================================
+   */
+
   useEffect(() => {
     if (!initialBookId) {
       return;
     }
 
-    if (books.some((book) => book.id === initialBookId)) {
-      setSelectedBookId(initialBookId);
+    if (
+      books.some(
+        (book) =>
+          book.id === initialBookId
+      )
+    ) {
+      setSelectedBookId(
+        initialBookId
+      );
     }
-  }, [initialBookId, books]);
+  }, [
+    initialBookId,
+    books,
+  ]);
 
   useEffect(() => {
     if (!initialChapterId) {
       return;
     }
 
-    const bookId = initialBookId || selectedBookId;
+    const bookId =
+      initialBookId ||
+      selectedBookId;
 
     if (!bookId) {
       return;
     }
 
-    const bookChapters = chaptersByBook[bookId] || [];
+    const bookChapters =
+      chaptersByBook[bookId] ||
+      [];
 
-    const chapterExists = bookChapters.some(
-      (chapter) => chapter.id === initialChapterId
-    );
+    const chapterExists =
+      bookChapters.some(
+        (chapter) =>
+          chapter.id ===
+          initialChapterId
+      );
 
     if (chapterExists) {
-      setSelectedChapterId(initialChapterId);
+      setSelectedChapterId(
+        initialChapterId
+      );
     }
   }, [
     initialChapterId,
@@ -217,32 +334,42 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     chaptersByBook,
   ]);
 
-  /*
-   * Pastikan chapter selalu milik buku aktif.
-   */
   useEffect(() => {
     if (!selectedBookId) {
       setSelectedChapterId('');
       return;
     }
 
-    const bookChapters = chaptersByBook[selectedBookId] || [];
+    const bookChapters =
+      chaptersByBook[
+        selectedBookId
+      ] || [];
 
     if (bookChapters.length === 0) {
       setSelectedChapterId('');
       return;
     }
 
-    const currentChapterStillExists = bookChapters.some(
-      (chapter) => chapter.id === selectedChapterId
-    );
-
-    if (!currentChapterStillExists) {
-      const sortedChapters = [...bookChapters].sort(
-        (a, b) => a.order - b.order
+    const currentChapterStillExists =
+      bookChapters.some(
+        (chapter) =>
+          chapter.id ===
+          selectedChapterId
       );
 
-      setSelectedChapterId(sortedChapters[0]?.id || '');
+    if (
+      !currentChapterStillExists
+    ) {
+      const sortedChapters =
+        [...bookChapters].sort(
+          (a, b) =>
+            a.order - b.order
+        );
+
+      setSelectedChapterId(
+        sortedChapters[0]?.id ||
+          ''
+      );
     }
   }, [
     selectedBookId,
@@ -250,9 +377,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     chaptersByBook,
   ]);
 
-  /*
-   * Pastikan chapter untuk buku aktif sudah diambil.
-   */
   useEffect(() => {
     if (!selectedBookId) {
       return;
@@ -262,7 +386,9 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       !loadedBooks[selectedBookId] &&
       !loadingByBook[selectedBookId]
     ) {
-      void refreshChapters(selectedBookId);
+      void refreshChapters(
+        selectedBookId
+      );
     }
   }, [
     selectedBookId,
@@ -277,48 +403,103 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
    * ============================================================
    */
 
-  const [content, setContent] = useState(
-    activeChapter?.content || ''
-  );
+  const [content, setContent] =
+    useState(
+      activeChapter?.content || ''
+    );
 
-  const [chapterTitle, setChapterTitle] = useState(
+  const [
+    chapterTitle,
+    setChapterTitle,
+  ] = useState(
     activeChapter?.title || ''
   );
 
-  const [saveStatus, setSaveStatus] =
-    useState<SaveStatus>('saved');
+  const [
+    saveStatus,
+    setSaveStatus,
+  ] = useState<SaveStatus>(
+    'saved'
+  );
 
-  const [lastSavedTime, setLastSavedTime] =
-    useState<string>('Tersimpan');
+  const [
+    lastSavedTime,
+    setLastSavedTime,
+  ] = useState<string>(
+    'Tersimpan'
+  );
 
-  const [isFocusMode, setIsFocusMode] =
-    useState(false);
+  const [
+    isFocusMode,
+    setIsFocusMode,
+  ] = useState(false);
 
-  const [fontFamily, setFontFamily] =
-    useState<'serif' | 'sans' | 'mono'>('serif');
+  const [
+    fontFamily,
+    setFontFamily,
+  ] = useState<
+    'serif' | 'sans' | 'mono'
+  >('serif');
 
-  const [fontSize, setFontSize] =
-    useState<number>(18);
+  const [
+    fontSize,
+    setFontSize,
+  ] = useState<number>(18);
 
   const [lineSpacing] =
     useState<number>(1.8);
 
-  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] =
-    useState(false);
+  const [
+    isHistoryDrawerOpen,
+    setIsHistoryDrawerOpen,
+  ] = useState(false);
+
+  const [
+    isMentionPanelOpen,
+    setIsMentionPanelOpen,
+  ] = useState(true);
+
+  const [
+    mentionOperationLoading,
+    setMentionOperationLoading,
+  ] = useState(false);
+
+  const [
+    mentionError,
+    setMentionError,
+  ] = useState<string | null>(
+    null
+  );
+
+  const previousContentRef =
+    useRef(
+      activeChapter?.content || ''
+    );
 
   const textareaRef =
-    useRef<HTMLTextAreaElement>(null);
+    useRef<HTMLTextAreaElement>(
+      null
+    );
+
+  const mentionHighlightRef =
+    useRef<HTMLDivElement>(null);
+
+  const mentionScrollSyncingRef =
+    useRef(false);
 
   const autoSaveTimerRef =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
+    useRef<
+      ReturnType<typeof setTimeout> | null
+    >(null);
 
   const pendingSelectionRef =
-    useRef<{ start: number; end: number } | null>(null);
+    useRef<{
+      start: number;
+      end: number;
+    } | null>(null);
 
-  /*
-   * Refs untuk menghindari stale closure.
-   */
-  const contentRef = useRef(content);
+  const contentRef =
+    useRef(content);
 
   const chapterTitleRef =
     useRef(chapterTitle);
@@ -327,41 +508,39 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     useRef(activeChapter);
 
   const saveStatusRef =
-    useRef<SaveStatus>(saveStatus);
+    useRef<SaveStatus>(
+      saveStatus
+    );
 
-  /*
-   * Menyimpan promise save yang sedang berjalan.
-   * Ini dipakai oleh flushPendingSave() agar perpindahan
-   * chapter/buku tidak terjadi sebelum save yang sedang
-   * berjalan selesai.
-   */
   const saveInFlightRef =
-    useRef<Promise<void> | null>(null);
+    useRef<Promise<void> | null>(
+      null
+    );
 
-  /*
-   * ID operasi save.
-   * Berguna agar hasil save lama tidak menimpa status
-   * editor yang sudah berpindah ke chapter lain.
-   */
   const saveOperationRef =
     useRef(0);
 
-  /*
-   * ID perpindahan chapter/buku.
-   * Kalau user melakukan rapid switching, request lama
-   * tidak boleh mengubah state setelah request terbaru masuk.
-   */
   const transitionRequestRef =
     useRef(0);
 
   /*
-   * Sinkronisasi refs setiap render.
+   * ============================================================
+   * REFS SYNC
+   * ============================================================
    */
+
   useEffect(() => {
-    contentRef.current = content;
-    chapterTitleRef.current = chapterTitle;
-    activeChapterRef.current = activeChapter;
-    saveStatusRef.current = saveStatus;
+    contentRef.current =
+      content;
+
+    chapterTitleRef.current =
+      chapterTitle;
+
+    activeChapterRef.current =
+      activeChapter;
+
+    saveStatusRef.current =
+      saveStatus;
   }, [
     content,
     chapterTitle,
@@ -375,208 +554,192 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
    * ============================================================
    */
 
-  const performSave = useCallback(
-    async (
-      manual = false,
-      reason = 'Auto-save draft',
-      overrides?: {
-        content?: string;
-        title?: string;
-      }
-    ) => {
-      const targetChapter =
-        activeChapterRef.current;
+  const performSave =
+    useCallback(
+      async (
+        manual = false,
+        reason = 'Auto-save draft',
+        overrides?: {
+          content?: string;
+          title?: string;
+        }
+      ) => {
+        const targetChapter =
+          activeChapterRef.current;
 
-      if (!targetChapter) {
-        return;
-      }
+        if (!targetChapter) {
+          return;
+        }
 
-      const operationId =
-        ++saveOperationRef.current;
+        const operationId =
+          ++saveOperationRef.current;
 
-      const latestContent =
-        overrides?.content ??
-        contentRef.current;
+        const latestContent =
+          overrides?.content ??
+          contentRef.current;
 
-      const latestTitle =
-        overrides?.title ??
-        chapterTitleRef.current;
+        const latestTitle =
+          overrides?.title ??
+          chapterTitleRef.current;
 
-      saveStatusRef.current = 'saving';
-      setSaveStatus('saving');
+        saveStatusRef.current =
+          'saving';
 
-      const savePromise = (async () => {
+        setSaveStatus('saving');
+
+        const savePromise =
+          (async () => {
+            try {
+              const words =
+                countWords(
+                  latestContent
+                );
+
+              const chars =
+                countCharacters(
+                  latestContent
+                );
+
+              const updatedChapter: Chapter =
+                {
+                  ...targetChapter,
+                  title:
+                    latestTitle.trim() ||
+                    targetChapter.title,
+                  content:
+                    latestContent,
+                  wordCount: words,
+                  characterCount:
+                    chars,
+                  lastSavedAt:
+                    Date.now(),
+                };
+
+              await onSaveChapter(
+                updatedChapter
+              );
+
+              if (
+                manual ||
+                Math.abs(
+                  words -
+                    (targetChapter.wordCount ||
+                      0)
+                ) > 20
+              ) {
+                await addSnapshot(
+                  targetChapter.bookId,
+                  targetChapter.id,
+                  {
+                    chapterTitle:
+                      updatedChapter.title,
+                    content:
+                      latestContent,
+                    wordCount:
+                      words,
+                    reason,
+                  }
+                );
+              }
+
+              if (
+                operationId !==
+                saveOperationRef.current
+              ) {
+                return;
+              }
+
+              if (
+                activeChapterRef.current
+                  ?.id !==
+                targetChapter.id
+              ) {
+                return;
+              }
+
+              if (
+                saveStatusRef.current ===
+                'unsaved'
+              ) {
+                return;
+              }
+
+              saveStatusRef.current =
+                'saved';
+
+              setSaveStatus(
+                'saved'
+              );
+
+              setLastSavedTime(
+                new Date().toLocaleTimeString(
+                  [],
+                  {
+                    hour: '2-digit',
+                    minute:
+                      '2-digit',
+                    second:
+                      '2-digit',
+                  }
+                )
+              );
+            } catch (error) {
+              console.error(
+                'Save failed:',
+                error
+              );
+
+              if (
+                operationId ===
+                  saveOperationRef.current &&
+                activeChapterRef.current
+                  ?.id ===
+                  targetChapter.id
+              ) {
+                saveStatusRef.current =
+                  'error';
+
+                setSaveStatus(
+                  'error'
+                );
+              }
+
+              throw error;
+            }
+          })();
+
+        saveInFlightRef.current =
+          savePromise;
+
         try {
-          const words =
-            countWords(latestContent);
-
-          const chars =
-            countCharacters(latestContent);
-
-          const updatedChapter: Chapter = {
-            ...targetChapter,
-            title:
-              latestTitle.trim() ||
-              targetChapter.title,
-            content: latestContent,
-            wordCount: words,
-            characterCount: chars,
-            lastSavedAt: Date.now(),
-          };
-
-          await onSaveChapter(updatedChapter);
-
-          /*
-           * Snapshot tetap scoped:
-           * bookId + chapterId.
-           */
+          await savePromise;
+        } finally {
           if (
-            manual ||
-            Math.abs(
-              words -
-                (targetChapter.wordCount || 0)
-            ) > 20
+            saveInFlightRef.current ===
+            savePromise
           ) {
-            await addSnapshot(
-              targetChapter.bookId,
-              targetChapter.id,
-              {
-                chapterTitle:
-                  updatedChapter.title,
-                content: latestContent,
-                wordCount: words,
-                reason,
-              }
-            );
+            saveInFlightRef.current =
+              null;
           }
-
-          /*
-           * Jangan mengubah status editor jika save ini
-           * sudah bukan operasi terbaru.
-           */
-          if (
-            operationId !==
-            saveOperationRef.current
-          ) {
-            return;
-          }
-
-          /*
-           * Jangan menandai chapter baru sebagai saved
-           * jika editor sudah berpindah ke chapter lain.
-           */
-          if (
-            activeChapterRef.current?.id !==
-            targetChapter.id
-          ) {
-            return;
-          }
-
-          /*
-           * Kalau user sudah mengetik lagi selama save
-           * berlangsung, jangan menghapus status unsaved.
-           */
-          if (
-            saveStatusRef.current ===
-            'unsaved'
-          ) {
-            return;
-          }
-
-          saveStatusRef.current = 'saved';
-          setSaveStatus('saved');
-
-          setLastSavedTime(
-            new Date().toLocaleTimeString(
-              [],
-              {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-              }
-            )
-          );
-        } catch (error) {
-          console.error(
-            'Save failed:',
-            error
-          );
-
-          /*
-           * Error dari save lama tidak boleh menimpa
-           * status chapter yang sekarang.
-           */
-          if (
-            operationId ===
-              saveOperationRef.current &&
-            activeChapterRef.current?.id ===
-              targetChapter.id
-          ) {
-            saveStatusRef.current = 'error';
-            setSaveStatus('error');
-          }
-
-          throw error;
         }
-      })();
-
-      saveInFlightRef.current =
-        savePromise;
-
-      try {
-        await savePromise;
-      } finally {
-        if (
-          saveInFlightRef.current ===
-          savePromise
-        ) {
-          saveInFlightRef.current =
-            null;
-        }
-      }
-    },
-    [
-      onSaveChapter,
-      addSnapshot,
-    ]
-  );
+      },
+      [
+        onSaveChapter,
+        addSnapshot,
+      ]
+    );
 
   /*
    * ============================================================
-   * AUTOSAVE TIMER
+   * AUTOSAVE
    * ============================================================
    */
 
-  const scheduleAutoSave = useCallback(() => {
-    if (autoSaveTimerRef.current) {
-      clearTimeout(
+  const scheduleAutoSave =
+    useCallback(() => {
+      if (
         autoSaveTimerRef.current
-      );
-
-      autoSaveTimerRef.current = null;
-    }
-
-    autoSaveTimerRef.current =
-      setTimeout(() => {
-        autoSaveTimerRef.current =
-          null;
-
-        void performSave(
-          false,
-          'Penyimpanan berkala otomatis'
-        );
-      }, 1800);
-  }, [performSave]);
-
-  /*
-   * ============================================================
-   * FLUSH PENDING SAVE
-   * ============================================================
-   */
-
-  const flushPendingSave =
-    useCallback(async () => {
-      if (autoSaveTimerRef.current) {
+      ) {
         clearTimeout(
           autoSaveTimerRef.current
         );
@@ -585,24 +748,47 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           null;
       }
 
-      /*
-       * Tunggu save yang sedang berjalan.
-       */
-      if (saveInFlightRef.current) {
+      autoSaveTimerRef.current =
+        setTimeout(() => {
+          autoSaveTimerRef.current =
+            null;
+
+          void performSave(
+            false,
+            'Penyimpanan berkala otomatis'
+          );
+        }, 1800);
+    }, [performSave]);
+
+  /*
+   * ============================================================
+   * FLUSH
+   * ============================================================
+   */
+
+  const flushPendingSave =
+    useCallback(async () => {
+      if (
+        autoSaveTimerRef.current
+      ) {
+        clearTimeout(
+          autoSaveTimerRef.current
+        );
+
+        autoSaveTimerRef.current =
+          null;
+      }
+
+      if (
+        saveInFlightRef.current
+      ) {
         try {
           await saveInFlightRef.current;
         } catch {
-          /*
-           * Error sudah ditangani oleh performSave.
-           * Kita tetap melanjutkan proses flush.
-           */
+          // Error sudah ditangani.
         }
       }
 
-      /*
-       * Jika setelah save sebelumnya masih ada
-       * perubahan baru, simpan lagi.
-       */
       if (
         saveStatusRef.current ===
         'unsaved'
@@ -613,26 +799,27 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             'Flush otomatis sebelum ganti/keluar'
           );
         } catch {
-          /*
-           * Status error sudah ditangani performSave.
-           */
+          // Error sudah ditangani.
         }
       }
     }, [performSave]);
 
   /*
    * ============================================================
-   * GANTI CHAPTER / BUKU
+   * GANTI CHAPTER
    * ============================================================
    */
 
   const handleChapterChange =
     useCallback(
-      async (newChapterId: string) => {
+      async (
+        newChapterId: string
+      ) => {
         const chapterExists =
           availableChapters.some(
             (chapter) =>
-              chapter.id === newChapterId
+              chapter.id ===
+              newChapterId
           );
 
         if (!chapterExists) {
@@ -644,11 +831,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
         await flushPendingSave();
 
-        /*
-         * Jika user sudah memilih chapter lain
-         * selama proses flush berlangsung, request ini
-         * tidak boleh mengambil alih.
-         */
         if (
           requestId !==
           transitionRequestRef.current
@@ -666,9 +848,17 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       ]
     );
 
+  /*
+   * ============================================================
+   * GANTI BUKU
+   * ============================================================
+   */
+
   const handleBookChange =
     useCallback(
-      async (newBookId: string) => {
+      async (
+        newBookId: string
+      ) => {
         const bookExists =
           books.some(
             (book) =>
@@ -705,10 +895,13 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         );
 
         setSelectedChapterId(
-          nextChapters[0]?.id || ''
+          nextChapters[0]?.id ||
+            ''
         );
 
-        onSelectBook(newBookId);
+        onSelectBook(
+          newBookId
+        );
       },
       [
         books,
@@ -720,33 +913,37 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
   /*
    * ============================================================
-   * SYNC ACTIVE CHAPTER -> EDITOR
+   * LOAD ACTIVE CHAPTER
    * ============================================================
    */
 
   useEffect(() => {
     if (!activeChapter) {
       setContent('');
-      contentRef.current = '';
+      contentRef.current =
+        '';
 
       setChapterTitle('');
-      chapterTitleRef.current = '';
+      chapterTitleRef.current =
+        '';
 
       saveStatusRef.current =
         'saved';
 
       setSaveStatus('saved');
+
       setLastSavedTime(
         'Tersimpan'
       );
 
+      setMentionError(null);
+
       return;
     }
 
-    /*
-     * Hentikan timer lama ketika chapter berganti.
-     */
-    if (autoSaveTimerRef.current) {
+    if (
+      autoSaveTimerRef.current
+    ) {
       clearTimeout(
         autoSaveTimerRef.current
       );
@@ -756,13 +953,18 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     }
 
     const nextContent =
-      activeChapter.content || '';
+      activeChapter.content ||
+      '';
 
     const nextTitle =
-      activeChapter.title || '';
+      activeChapter.title ||
+      '';
 
     setContent(nextContent);
     contentRef.current =
+      nextContent;
+
+    previousContentRef.current =
       nextContent;
 
     setChapterTitle(nextTitle);
@@ -782,13 +984,25 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             [],
             {
               hour: '2-digit',
-              minute: '2-digit',
+              minute:
+                '2-digit',
             }
           )
         : 'Tersimpan'
     );
 
+    setMentionError(null);
+
     void refreshSnapshots(
+      activeChapter.bookId,
+      activeChapter.id
+    );
+
+    void refreshCharacters(
+      activeChapter.bookId
+    );
+
+    void refreshMentions(
       activeChapter.bookId,
       activeChapter.id
     );
@@ -799,11 +1013,13 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     activeChapter?.title,
     activeChapter?.lastSavedAt,
     refreshSnapshots,
+    refreshCharacters,
+    refreshMentions,
   ]);
 
   /*
    * ============================================================
-   * UNMOUNT / CLOSE WINDOW
+   * BEFORE UNLOAD
    * ============================================================
    */
 
@@ -841,7 +1057,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
   /*
    * ============================================================
-   * PRESERVASI KURSOR
+   * CURSOR
    * ============================================================
    */
 
@@ -853,7 +1069,8 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       const {
         start,
         end,
-      } = pendingSelectionRef.current;
+      } =
+        pendingSelectionRef.current;
 
       textareaRef.current.setSelectionRange(
         start,
@@ -891,10 +1108,321 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         Math.max(
           1,
           Math.ceil(
-            currentWordCount / 200
+            currentWordCount /
+              200
           )
         ),
       [currentWordCount]
+    );
+
+  /*
+   * ============================================================
+   * CHARACTER UNTUK BUKU AKTIF
+   * ============================================================
+   */
+
+  const activeBookCharacters =
+    useMemo(() => {
+      if (!selectedBookId) {
+        return [];
+      }
+
+      return characters.filter(
+        (character) =>
+          character.bookIds?.includes(
+            selectedBookId
+          )
+      );
+    }, [
+      characters,
+      selectedBookId,
+    ]);
+
+  /*
+   * ============================================================
+   * MENTION OVERLAP
+   * ============================================================
+   */
+
+  const isMentionOverlapping =
+    useCallback(
+      (
+        start: number,
+        end: number,
+        ignoreMentionId?: string
+      ) => {
+        return mentions.some(
+          (mention) => {
+            if (
+              ignoreMentionId &&
+              mention.id ===
+                ignoreMentionId
+            ) {
+              return false;
+            }
+
+            const mentionStart =
+              mention.startOffset;
+
+            const mentionEnd =
+              mention.endOffset;
+
+            if (
+              mentionStart ===
+                undefined ||
+              mentionEnd ===
+                undefined
+            ) {
+              return false;
+            }
+
+            return (
+              start <
+                mentionEnd &&
+              end >
+                mentionStart
+            );
+          }
+        );
+      },
+      [mentions]
+    );
+
+  /*
+   * ============================================================
+   * RECONCILE MENTION OFFSET
+   * ============================================================
+   */
+
+  const reconcileMentionsAfterTextChange =
+    useCallback(
+      async (
+        oldText: string,
+        newText: string
+      ) => {
+        if (!activeChapter) {
+          return;
+        }
+
+        if (
+          oldText === newText ||
+          mentions.length === 0
+        ) {
+          return;
+        }
+
+        let prefixLength = 0;
+
+        while (
+          prefixLength <
+            oldText.length &&
+          prefixLength <
+            newText.length &&
+          oldText[
+            prefixLength
+          ] ===
+            newText[
+              prefixLength
+            ]
+        ) {
+          prefixLength += 1;
+        }
+
+        let suffixLength = 0;
+
+        while (
+          suffixLength <
+            oldText.length -
+              prefixLength &&
+          suffixLength <
+            newText.length -
+              prefixLength &&
+          oldText[
+            oldText.length -
+              1 -
+              suffixLength
+          ] ===
+            newText[
+              newText.length -
+                1 -
+                suffixLength
+            ]
+        ) {
+          suffixLength += 1;
+        }
+
+        const oldChangeEnd =
+          oldText.length -
+          suffixLength;
+
+        const newChangeEnd =
+          newText.length -
+          suffixLength;
+
+        const delta =
+          newText.length -
+          oldText.length;
+
+        const isPureInsertion =
+          prefixLength ===
+          oldChangeEnd;
+
+        for (
+          const mention of mentions
+        ) {
+          const start =
+            mention.startOffset;
+
+          const end =
+            mention.endOffset;
+
+          if (
+            start === undefined ||
+            end === undefined
+          ) {
+            continue;
+          }
+
+          /*
+           * Pure insertion.
+           *
+           * Teks yang berada sebelum
+           * titik insertion tetap.
+           *
+           * Mention pada/setelah titik
+           * insertion ikut bergeser.
+           */
+          if (isPureInsertion) {
+            if (
+              end <=
+              prefixLength
+            ) {
+              continue;
+            }
+
+            if (
+              start >=
+              prefixLength
+            ) {
+              try {
+                await editMention(
+                  activeChapter.bookId,
+                  activeChapter.id,
+                  mention.id,
+                  {
+                    startOffset:
+                      start +
+                      delta,
+                    endOffset:
+                      end +
+                      delta,
+                  }
+                );
+              } catch (error) {
+                console.error(
+                  'Gagal menggeser character mention:',
+                  error
+                );
+              }
+
+              continue;
+            }
+
+            /*
+             * Insertion berada di
+             * tengah mention.
+             *
+             * Offset tidak lagi aman.
+             */
+            try {
+              await removeMention(
+                activeChapter.bookId,
+                activeChapter.id,
+                mention.id
+              );
+            } catch (error) {
+              console.error(
+                'Gagal menghapus character mention lama:',
+                error
+              );
+            }
+
+            continue;
+          }
+
+          /*
+           * Mention sebelum perubahan.
+           */
+          if (
+            end <=
+            prefixLength
+          ) {
+            continue;
+          }
+
+          /*
+           * Mention setelah perubahan.
+           */
+          if (
+            start >=
+            oldChangeEnd
+          ) {
+            try {
+              await editMention(
+                activeChapter.bookId,
+                activeChapter.id,
+                mention.id,
+                {
+                  startOffset:
+                    start +
+                    delta,
+                  endOffset:
+                    end +
+                    delta,
+                }
+              );
+            } catch (error) {
+              console.error(
+                'Gagal menggeser character mention:',
+                error
+              );
+            }
+
+            continue;
+          }
+
+          /*
+           * Mention terkena replacement/
+           * deletion.
+           */
+          try {
+            await removeMention(
+              activeChapter.bookId,
+              activeChapter.id,
+              mention.id
+            );
+          } catch (error) {
+            console.error(
+              'Gagal menghapus character mention lama:',
+              error
+            );
+          }
+        }
+
+        await refreshMentions(
+          activeChapter.bookId,
+          activeChapter.id
+        );
+
+        void newChangeEnd;
+      },
+      [
+        activeChapter,
+        mentions,
+        editMention,
+        removeMention,
+        refreshMentions,
+      ]
     );
 
   /*
@@ -910,13 +1438,16 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       const val =
         e.target.value;
 
+      const previousContent =
+        previousContentRef.current;
+
       setContent(val);
 
-      /*
-       * Update ref langsung.
-       * Tidak menunggu React render/effect.
-       */
-      contentRef.current = val;
+      contentRef.current =
+        val;
+
+      previousContentRef.current =
+        val;
 
       saveStatusRef.current =
         'unsaved';
@@ -924,6 +1455,11 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       setSaveStatus('unsaved');
 
       scheduleAutoSave();
+
+      void reconcileMentionsAfterTextChange(
+        previousContent,
+        val
+      );
     };
 
   /*
@@ -936,8 +1472,10 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     const handleKeyDown =
       (e: KeyboardEvent) => {
         if (
-          (e.ctrlKey || e.metaKey) &&
-          e.key.toLowerCase() === 's'
+          (e.ctrlKey ||
+            e.metaKey) &&
+          e.key.toLowerCase() ===
+            's'
         ) {
           e.preventDefault();
 
@@ -976,68 +1514,612 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
    * ============================================================
    */
 
-  const insertFormatting = (
-    prefix: string,
-    suffix = '',
-    placeholder = ''
-  ) => {
-    if (!textareaRef.current) {
-      return;
-    }
+  const insertFormatting =
+    (
+      prefix: string,
+      suffix = '',
+      placeholder = ''
+    ) => {
+      if (!textareaRef.current) {
+        return;
+      }
 
-    const el =
-      textareaRef.current;
+      const el =
+        textareaRef.current;
 
-    const start =
-      el.selectionStart;
+      const start =
+        el.selectionStart;
 
-    const end =
-      el.selectionEnd;
+      const end =
+        el.selectionEnd;
 
-    const selected =
-      content.substring(
-        start,
-        end
-      ) || placeholder;
+      const selected =
+        content.substring(
+          start,
+          end
+        ) || placeholder;
 
-    const replacement =
-      prefix +
-      selected +
-      suffix;
+      const replacement =
+        prefix +
+        selected +
+        suffix;
 
-    const newContent =
-      content.substring(
-        0,
-        start
-      ) +
-      replacement +
-      content.substring(end);
+      const newContent =
+        content.substring(
+          0,
+          start
+        ) +
+        replacement +
+        content.substring(end);
 
-    pendingSelectionRef.current =
-      {
-        start:
-          start +
-          prefix.length,
-        end:
-          start +
-          prefix.length +
-          selected.length,
-      };
+      pendingSelectionRef.current =
+        {
+          start:
+            start +
+            prefix.length,
+          end:
+            start +
+            prefix.length +
+            selected.length,
+        };
 
-    setContent(newContent);
+      const previousContent =
+        contentRef.current;
 
-    contentRef.current =
-      newContent;
+      setContent(newContent);
 
-    saveStatusRef.current =
-      'unsaved';
+      contentRef.current =
+        newContent;
 
-    setSaveStatus('unsaved');
+      previousContentRef.current =
+        newContent;
 
-    scheduleAutoSave();
+      saveStatusRef.current =
+        'unsaved';
 
-    el.focus();
-  };
+      setSaveStatus('unsaved');
+
+      scheduleAutoSave();
+
+      void reconcileMentionsAfterTextChange(
+        previousContent,
+        newContent
+      );
+
+      el.focus();
+    };
+
+  /*
+   * ============================================================
+   * CREATE CHARACTER MENTION
+   * ============================================================
+   */
+
+  const handleCreateCharacterMention =
+    useCallback(
+      async (
+        character: CharacterWiki,
+        selectionStart: number,
+        selectionEnd: number
+      ) => {
+        if (!activeChapter) {
+          return;
+        }
+
+        const originalContent =
+          contentRef.current;
+
+        const safeStart = Math.max(
+          0,
+          Math.min(
+            selectionStart,
+            originalContent.length
+          )
+        );
+
+        const safeEnd = Math.max(
+          safeStart,
+          Math.min(
+            selectionEnd,
+            originalContent.length
+          )
+        );
+
+        const hasSelection =
+          safeEnd > safeStart;
+
+        const selectedText =
+          originalContent.slice(
+            safeStart,
+            safeEnd
+          );
+
+        const displayText =
+          hasSelection
+            ? selectedText
+            : character.fullName;
+
+        if (
+          !displayText.trim()
+        ) {
+          setMentionError(
+            'Teks mention tidak boleh kosong.'
+          );
+
+          return;
+        }
+
+        let startOffset =
+          safeStart;
+
+        let endOffset =
+          safeEnd;
+
+        let nextContent =
+          originalContent;
+
+        if (!hasSelection) {
+          startOffset =
+            safeStart;
+
+          endOffset =
+            safeStart +
+            character.fullName
+              .length;
+
+          nextContent =
+            originalContent.slice(
+              0,
+              safeStart
+            ) +
+            character.fullName +
+            originalContent.slice(
+              safeStart
+            );
+        }
+
+        if (
+          isMentionOverlapping(
+            startOffset,
+            endOffset
+          )
+        ) {
+          setMentionError(
+            'Bagian teks tersebut sudah memiliki character mention.'
+          );
+
+          return;
+        }
+
+        setMentionError(null);
+
+        setMentionOperationLoading(
+          true
+        );
+
+        try {
+          if (!hasSelection) {
+            /*
+             * Reconcile mention lama terlebih
+             * dahulu karena kita menyisipkan
+             * nama karakter ke content.
+             */
+            await reconcileMentionsAfterTextChange(
+              originalContent,
+              nextContent
+            );
+
+            setContent(
+              nextContent
+            );
+
+            contentRef.current =
+              nextContent;
+
+            previousContentRef.current =
+              nextContent;
+
+            pendingSelectionRef.current =
+              {
+                start: endOffset,
+                end: endOffset,
+              };
+
+            saveStatusRef.current =
+              'unsaved';
+
+            setSaveStatus(
+              'unsaved'
+            );
+          }
+
+          await addMention(
+            activeChapter.bookId,
+            activeChapter.id,
+            {
+              characterId:
+                character.id,
+              displayText,
+              startOffset,
+              endOffset,
+            }
+          );
+
+          if (!hasSelection) {
+            scheduleAutoSave();
+          }
+
+          await refreshMentions(
+            activeChapter.bookId,
+            activeChapter.id
+          );
+        } catch (error) {
+          console.error(
+            'Gagal membuat character mention:',
+            error
+          );
+
+          if (!hasSelection) {
+            /*
+             * Rollback content.
+             */
+            setContent(
+              originalContent
+            );
+
+            contentRef.current =
+              originalContent;
+
+            previousContentRef.current =
+              originalContent;
+
+            pendingSelectionRef.current =
+              {
+                start:
+                  safeStart,
+                end:
+                  safeStart,
+              };
+
+            saveStatusRef.current =
+              'unsaved';
+
+            setSaveStatus(
+              'unsaved'
+            );
+
+            /*
+             * Kembalikan offset mention
+             * lama jika tadi sempat digeser.
+             */
+            try {
+              await reconcileMentionsAfterTextChange(
+                nextContent,
+                originalContent
+              );
+            } catch {
+              // Error sudah dilaporkan oleh reconcile.
+            }
+          }
+
+          setMentionError(
+            error instanceof Error
+              ? error.message
+              : 'Gagal membuat character mention.'
+          );
+        } finally {
+          setMentionOperationLoading(
+            false
+          );
+        }
+      },
+      [
+        activeChapter,
+        addMention,
+        isMentionOverlapping,
+        reconcileMentionsAfterTextChange,
+        scheduleAutoSave,
+        refreshMentions,
+      ]
+    );
+
+  /*
+   * ============================================================
+   * NAVIGATE TO MENTION
+   * ============================================================
+   */
+
+  const handleNavigateToMention =
+    useCallback(
+      (
+        mention: CharacterMention
+      ) => {
+        if (
+          !textareaRef.current ||
+          mention.startOffset ===
+            undefined ||
+          mention.endOffset ===
+            undefined
+        ) {
+          return;
+        }
+
+        const textarea =
+          textareaRef.current;
+
+        const maxLength =
+          contentRef.current.length;
+
+        const start = Math.max(
+          0,
+          Math.min(
+            mention.startOffset,
+            maxLength
+          )
+        );
+
+        const end = Math.max(
+          start,
+          Math.min(
+            mention.endOffset,
+            maxLength
+          )
+        );
+
+        pendingSelectionRef.current =
+          {
+            start,
+            end,
+          };
+
+        textarea.focus();
+
+        requestAnimationFrame(() => {
+          textarea.setSelectionRange(
+            start,
+            end
+          );
+
+          const lineHeight =
+            parseFloat(
+              getComputedStyle(
+                textarea
+              ).lineHeight
+            ) || 32;
+
+          const lineNumber =
+            contentRef.current
+              .slice(
+                0,
+                start
+              )
+              .split('\n')
+              .length;
+
+          const targetScrollTop =
+            Math.max(
+              0,
+              (lineNumber - 3) *
+                lineHeight
+            );
+
+          textarea.scrollTop =
+            targetScrollTop;
+        });
+      },
+      []
+    );
+
+  /*
+   * ============================================================
+   * REMOVE CHARACTER MENTION
+   * ============================================================
+   */
+
+  const handleRemoveMention =
+    useCallback(
+      async (
+        mention: CharacterMention
+      ) => {
+        if (!activeChapter) {
+          return;
+        }
+
+        setMentionOperationLoading(
+          true
+        );
+
+        setMentionError(null);
+
+        try {
+          await removeMention(
+            activeChapter.bookId,
+            activeChapter.id,
+            mention.id
+          );
+
+          await refreshMentions(
+            activeChapter.bookId,
+            activeChapter.id
+          );
+        } catch (error) {
+          console.error(
+            'Gagal menghapus character mention:',
+            error
+          );
+
+          setMentionError(
+            error instanceof Error
+              ? error.message
+              : 'Gagal menghapus character mention.'
+          );
+        } finally {
+          setMentionOperationLoading(
+            false
+          );
+        }
+      },
+      [
+        activeChapter,
+        removeMention,
+        refreshMentions,
+      ]
+    );
+
+  /*
+   * ============================================================
+   * MENTION HIGHLIGHT
+   * ============================================================
+   */
+
+  const mentionSegments =
+    useMemo(() => {
+      if (
+        !content ||
+        mentions.length === 0
+      ) {
+        return [
+          {
+            type: 'text' as const,
+            value: content,
+          },
+        ];
+      }
+
+      const validMentions =
+        mentions
+          .filter(
+            (mention) =>
+              mention.startOffset !==
+                undefined &&
+              mention.endOffset !==
+                undefined &&
+              mention.startOffset >=
+                0 &&
+              mention.endOffset >
+                mention.startOffset &&
+              mention.startOffset <
+                content.length
+          )
+          .map((mention) => ({
+            mention,
+            start:
+              mention.startOffset!,
+            end: Math.min(
+              mention.endOffset!,
+              content.length
+            ),
+          }))
+          .sort(
+            (a, b) =>
+              a.start - b.start
+          );
+
+      if (
+        validMentions.length ===
+        0
+      ) {
+        return [
+          {
+            type: 'text' as const,
+            value: content,
+          },
+        ];
+      }
+
+      const segments: Array<
+        | {
+            type: 'text';
+            value: string;
+          }
+        | {
+            type: 'mention';
+            value: string;
+            mention: CharacterMention;
+          }
+      > = [];
+
+      let cursor = 0;
+
+      for (const item of validMentions) {
+        if (
+          item.start < cursor
+        ) {
+          continue;
+        }
+
+        if (
+          item.start > cursor
+        ) {
+          segments.push({
+            type: 'text',
+            value:
+              content.slice(
+                cursor,
+                item.start
+              ),
+          });
+        }
+
+        segments.push({
+          type: 'mention',
+          value:
+            content.slice(
+              item.start,
+              item.end
+            ),
+          mention:
+            item.mention,
+        });
+
+        cursor = item.end;
+      }
+
+      if (
+        cursor < content.length
+      ) {
+        segments.push({
+          type: 'text',
+          value:
+            content.slice(cursor),
+        });
+      }
+
+      return segments;
+    }, [
+      content,
+      mentions,
+    ]);
+
+  const handleMentionHighlightScroll =
+    useCallback(() => {
+      if (
+        !textareaRef.current ||
+        !mentionHighlightRef.current
+      ) {
+        return;
+      }
+
+      if (
+        mentionScrollSyncingRef.current
+      ) {
+        return;
+      }
+
+      mentionScrollSyncingRef.current =
+        true;
+
+      mentionHighlightRef.current.scrollTop =
+        textareaRef.current.scrollTop;
+
+      mentionHighlightRef.current.scrollLeft =
+        textareaRef.current.scrollLeft;
+
+      requestAnimationFrame(() => {
+        mentionScrollSyncingRef.current =
+          false;
+      });
+    }, []);
 
   /*
    * ============================================================
@@ -1046,7 +2128,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
    */
 
   const handleRestoreSnapshot =
-    (
+    async (
       snap: ChapterSnapshot
     ) => {
       if (
@@ -1059,9 +2141,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         return;
       }
 
-      /*
-       * Hentikan timer autosave lama.
-       */
       if (
         autoSaveTimerRef.current
       ) {
@@ -1073,9 +2152,38 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           null;
       }
 
-      /*
-       * Update state DAN ref secara langsung.
-       */
+      if (activeChapter) {
+        try {
+          const currentMentions =
+            [...mentions];
+
+          await Promise.all(
+            currentMentions.map(
+              (mention) =>
+                removeMention(
+                  activeChapter.bookId,
+                  activeChapter.id,
+                  mention.id
+                )
+            )
+          );
+
+          await refreshMentions(
+            activeChapter.bookId,
+            activeChapter.id
+          );
+        } catch (error) {
+          console.error(
+            'Gagal membersihkan character mention saat restore snapshot:',
+            error
+          );
+
+          setMentionError(
+            'Snapshot dipulihkan, tetapi sebagian character mention lama gagal dibersihkan.'
+          );
+        }
+      }
+
       setContent(
         snap.content
       );
@@ -1087,6 +2195,9 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
       contentRef.current =
         snap.content;
 
+      previousContentRef.current =
+        snap.content;
+
       chapterTitleRef.current =
         snap.chapterTitle;
 
@@ -1095,19 +2206,22 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
       setSaveStatus('unsaved');
 
-      /*
-       * Sangat penting:
-       * performSave menerima overrides sehingga tidak
-       * bergantung pada timing React state update.
-       */
+      pendingSelectionRef.current =
+        {
+          start: 0,
+          end: 0,
+        };
+
       void performSave(
         true,
         `Dipulihkan dari snapshot (${new Date(
           snap.timestamp
         ).toLocaleTimeString()})`,
         {
-          content: snap.content,
-          title: snap.chapterTitle,
+          content:
+            snap.content,
+          title:
+            snap.chapterTitle,
         }
       );
 
@@ -1122,53 +2236,54 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
    * ============================================================
    */
 
-  const handleExportText = (
-    format: 'txt' | 'md'
-  ) => {
-    if (!activeChapter) {
-      return;
-    }
-
-    const ext =
-      format === 'md'
-        ? 'md'
-        : 'txt';
-
-    const textData =
-      `# ${chapterTitle}\n\n${content}`;
-
-    const blob = new Blob(
-      [textData],
-      {
-        type:
-          'text/plain;charset=utf-8',
+  const handleExportText =
+    (
+      format: 'txt' | 'md'
+    ) => {
+      if (!activeChapter) {
+        return;
       }
-    );
 
-    const url =
-      URL.createObjectURL(
-        blob
+      const ext =
+        format === 'md'
+          ? 'md'
+          : 'txt';
+
+      const textData =
+        `# ${chapterTitle}\n\n${content}`;
+
+      const blob = new Blob(
+        [textData],
+        {
+          type:
+            'text/plain;charset=utf-8',
+        }
       );
 
-    const a =
-      document.createElement(
-        'a'
+      const url =
+        URL.createObjectURL(
+          blob
+        );
+
+      const a =
+        document.createElement(
+          'a'
+        );
+
+      a.href = url;
+
+      a.download =
+        `${chapterTitle.replace(
+          /[^a-z0-9]/gi,
+          '_'
+        )}.${ext}`;
+
+      a.click();
+
+      URL.revokeObjectURL(
+        url
       );
-
-    a.href = url;
-
-    a.download =
-      `${chapterTitle.replace(
-        /[^a-z0-9]/gi,
-        '_'
-      )}.${ext}`;
-
-    a.click();
-
-    URL.revokeObjectURL(
-      url
-    );
-  };
+    };
 
   /*
    * ============================================================
@@ -1187,13 +2302,15 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         </div>
 
         <h3 className="font-editorial text-xl sm:text-2xl font-bold text-[#FAF7EE] mb-2">
-          Belum ada proyek buku untuk ditulis.
+          Belum ada proyek buku untuk
+          ditulis.
         </h3>
 
         <p className="text-xs sm:text-sm text-[#9E9EB2] max-w-md mb-6 leading-relaxed">
-          Sebelum menggunakan Studio Editor,
-          buat buku cerita pertamamu di Workspace
-          dan tambahkan bab naskah.
+          Sebelum menggunakan Studio
+          Editor, buat buku cerita
+          pertamamu di Workspace dan
+          tambahkan bab naskah.
         </p>
 
         <button
@@ -1203,6 +2320,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           className="py-3 px-6 bg-gradient-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
         >
           <BookOpen className="w-4 h-4" />
+
           <span>
             Buka Workspace & Buat Buku
           </span>
@@ -1255,11 +2373,6 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     );
   }
 
-  /*
-   * Kondisi benar-benar kosong:
-   * buku sudah selesai di-load tetapi belum
-   * mempunyai bab.
-   */
   if (!activeChapter) {
     if (!activeBookLoaded) {
       return (
@@ -1287,12 +2400,14 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         </div>
 
         <h3 className="font-editorial text-xl sm:text-2xl font-bold text-[#FAF7EE] mb-2">
-          Buku ini belum memiliki bab naskah.
+          Buku ini belum memiliki bab
+          naskah.
         </h3>
 
         <p className="text-xs sm:text-sm text-[#9E9EB2] max-w-md leading-relaxed">
-          Tambahkan bab baru dari Workspace
-          untuk mulai menulis naskahmu di sini.
+          Tambahkan bab baru dari
+          Workspace untuk mulai menulis
+          naskahmu di sini.
         </p>
       </div>
     );
@@ -1313,6 +2428,10 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           : 'space-y-4'
       }`}
     >
+      {/* ======================================================
+          BOOK / CHAPTER BAR
+          ====================================================== */}
+
       <div className="bg-[#1E1E2E] border border-[#2A2A3C] rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div
           className="flex flex-wrap items-center gap-3"
@@ -1330,12 +2449,12 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
               }
               className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
             >
-              {books.map((b) => (
+              {books.map((book) => (
                 <option
-                  key={b.id}
-                  value={b.id}
+                  key={book.id}
+                  value={book.id}
                 >
-                  {b.title}
+                  {book.title}
                 </option>
               ))}
             </select>
@@ -1343,39 +2462,39 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
           {availableChapters.length >
             0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#6E6E85]">
-                /
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#6E6E85]">
+                  /
+                </span>
 
-              <select
-                value={
-                  selectedChapterId
-                }
-                onChange={(e) =>
-                  void handleChapterChange(
-                    e.target.value
-                  )
-                }
-                className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
-              >
-                {availableChapters.map(
-                  (chap) => (
-                    <option
-                      key={chap.id}
-                      value={chap.id}
-                    >
-                      Bab{' '}
-                      {
-                        chap.chapterNumber
-                      }
-                      : {chap.title}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-          )}
+                <select
+                  value={
+                    selectedChapterId
+                  }
+                  onChange={(e) =>
+                    void handleChapterChange(
+                      e.target.value
+                    )
+                  }
+                  className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
+                >
+                  {availableChapters.map(
+                    (chap) => (
+                      <option
+                        key={chap.id}
+                        value={chap.id}
+                      >
+                        Bab{' '}
+                        {
+                          chap.chapterNumber
+                        }
+                        : {chap.title}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+            )}
         </div>
 
         <div
@@ -1486,6 +2605,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             title="Riwayat Draft Darurat & Pemulihan"
           >
             <History className="w-3.5 h-3.5" />
+
             <span>
               Draft Darurat (
               {activeSnapshots.length})
@@ -1515,6 +2635,10 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ======================================================
+          STATS
+          ====================================================== */}
 
       <div
         data-tour="editor-stats-ribbon"
@@ -1546,7 +2670,8 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
             <span className="text-[#8E8EA4]">
               Estimasi Baca: ~
-              {readingTimeMinutes} mnt
+              {readingTimeMinutes}{' '}
+              mnt
             </span>
           </div>
         </div>
@@ -1577,6 +2702,10 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ======================================================
+          TOOLBAR
+          ====================================================== */}
 
       <div
         data-tour="editor-export-tools"
@@ -1724,6 +2853,52 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           >
             * * * Adegan
           </button>
+
+          <span className="w-px h-5 bg-[#2A2A3C] mx-1" />
+
+          <CharacterMentionPicker
+            characters={
+              activeBookCharacters
+            }
+            mentions={mentions}
+            disabled={
+              mentionOperationLoading
+            }
+            error={mentionError}
+            onCreateMention={
+              handleCreateCharacterMention
+            }
+          />
+
+          <button
+            type="button"
+            onClick={() =>
+              setIsMentionPanelOpen(
+                (current) => !current
+              )
+            }
+            className={`py-1 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              isMentionPanelOpen
+                ? 'bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30'
+                : 'text-[#B0B0C4] hover:text-[#FAF7EE] hover:bg-[#2A2A3E]'
+            }`}
+            title="Tampilkan Character Mentions"
+          >
+            <PanelRight className="w-3.5 h-3.5" />
+
+            <span>
+              Mentions
+            </span>
+
+            {mentions.length >
+              0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] text-[9px] font-mono flex items-center justify-center">
+                {
+                  mentions.length
+                }
+              </span>
+            )}
+          </button>
         </div>
 
         <div
@@ -1745,9 +2920,11 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             <option value="serif">
               Serif (Editorial)
             </option>
+
             <option value="sans">
               Sans-Serif
             </option>
+
             <option value="mono">
               Monospace
             </option>
@@ -1757,7 +2934,9 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             value={fontSize}
             onChange={(e) =>
               setFontSize(
-                Number(e.target.value)
+                Number(
+                  e.target.value
+                )
               )
             }
             className="px-2 py-1 bg-[#161624] border border-[#2A2A3C] rounded-lg text-xs text-[#C8C8DC] outline-none cursor-pointer font-mono"
@@ -1765,15 +2944,19 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             <option value={15}>
               15px
             </option>
+
             <option value={17}>
               17px
             </option>
+
             <option value={18}>
               18px
             </option>
+
             <option value={20}>
               20px
             </option>
+
             <option value={22}>
               22px
             </option>
@@ -1785,7 +2968,9 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
           >
             <button
               onClick={() =>
-                handleExportText('txt')
+                handleExportText(
+                  'txt'
+                )
               }
               className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg text-xs transition-colors cursor-pointer"
               title="Unduh sebagai Naskah .txt"
@@ -1796,58 +2981,212 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
         </div>
       </div>
 
+      {/* ======================================================
+          MENTION ERROR
+          ====================================================== */}
+
+      {mentionError && (
+        <div className="px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 flex items-center justify-between gap-3">
+          <span>
+            {mentionError}
+          </span>
+
+          <button
+            type="button"
+            onClick={() =>
+              setMentionError(
+                null
+              )
+            }
+            className="text-red-300 hover:text-white cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* ======================================================
+          EDITOR + CHARACTER MENTION PANEL
+          ====================================================== */}
+
       <div
-        data-tour="editor-canvas-stage"
-        className="relative flex flex-col bg-[#1A1A28] border border-[#2A2A3C] rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-2xl min-h-[550px]"
+        className={`flex flex-col ${
+          isMentionPanelOpen
+            ? 'lg:flex-row'
+            : ''
+        } gap-4 items-stretch`}
       >
-        <input
-          id="editor-chapter-title-input"
-          type="text"
-          value={chapterTitle}
-          onChange={(e) => {
-            const nextTitle =
-              e.target.value;
+        {/* EDITOR CANVAS */}
 
-            setChapterTitle(
-              nextTitle
-            );
+        <div
+          data-tour="editor-canvas-stage"
+          className="relative flex flex-col flex-1 min-w-0 bg-[#1A1A28] border border-[#2A2A3C] rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-2xl min-h-[550px] overflow-hidden"
+        >
+          <input
+            id="editor-chapter-title-input"
+            type="text"
+            value={chapterTitle}
+            onChange={(e) => {
+              const nextTitle =
+                e.target.value;
 
-            chapterTitleRef.current =
-              nextTitle;
+              setChapterTitle(
+                nextTitle
+              );
 
-            saveStatusRef.current =
-              'unsaved';
+              chapterTitleRef.current =
+                nextTitle;
 
-            setSaveStatus('unsaved');
+              saveStatusRef.current =
+                'unsaved';
 
-            scheduleAutoSave();
-          }}
-          placeholder="Judul Bab..."
-          className="font-editorial text-2xl sm:text-3xl font-bold text-[#FAF7EE] bg-transparent border-b border-[#2A2A3C] pb-3 mb-6 outline-none placeholder-[#55556C] focus:border-[#D4AF37] transition-colors"
-        />
+              setSaveStatus(
+                'unsaved'
+              );
 
-        <textarea
-          id="editor-manuscript-textarea"
-          ref={textareaRef}
-          value={content}
-          onChange={handleContentChange}
-          placeholder="Mulai tuliskan kisah petualangan, dialog menegangkan, atau monolog karaktermu di sini..."
-          style={{
-            fontFamily:
-              fontFamily === 'serif'
-                ? "'Cinzel', serif, Georgia, 'Times New Roman'"
-                : fontFamily ===
-                  'mono'
-                ? "'JetBrains Mono', monospace"
-                : "'Plus Jakarta Sans', sans-serif",
-            fontSize: `${fontSize}px`,
-            lineHeight:
-              lineSpacing,
-          }}
-          className="w-full flex-1 bg-transparent text-[#E0E0E0] outline-none resize-none placeholder-[#4E4E66] selection:bg-[#D4AF37]/30 min-h-[480px]"
-          autoFocus
-        />
+              scheduleAutoSave();
+            }}
+            placeholder="Judul Bab..."
+            className="font-editorial text-2xl sm:text-3xl font-bold text-[#FAF7EE] bg-transparent border-b border-[#2A2A3C] pb-3 mb-6 outline-none placeholder-[#55556C] focus:border-[#D4AF37] transition-colors shrink-0"
+          />
+
+          <div className="relative flex-1 min-h-[480px]">
+            {/* ==================================================
+                MENTION HIGHLIGHT LAYER
+                ================================================== */}
+
+            <div
+              ref={
+                mentionHighlightRef
+              }
+              aria-hidden="true"
+              className="absolute inset-0 w-full min-h-[480px] overflow-hidden pointer-events-none whitespace-pre-wrap break-words"
+              style={{
+                fontFamily:
+                  fontFamily ===
+                  'serif'
+                    ? "'Cinzel', serif, Georgia, 'Times New Roman'"
+                    : fontFamily ===
+                      'mono'
+                    ? "'JetBrains Mono', monospace"
+                    : "'Plus Jakarta Sans', sans-serif",
+                fontSize: `${fontSize}px`,
+                lineHeight:
+                  lineSpacing,
+                padding: 0,
+              }}
+            >
+              {mentionSegments.map(
+                (segment, index) => {
+                  if (
+                    segment.type ===
+                    'mention'
+                  ) {
+                    const character =
+                      activeBookCharacters.find(
+                        (item) =>
+                          item.id ===
+                          segment
+                            .mention
+                            .characterId
+                      );
+
+                    return (
+                      <span
+                        key={`${segment.mention.id}-${index}`}
+                        className="bg-[#D4AF37]/20 text-[#F3D77A] border-b border-[#D4AF37]/70 rounded-sm"
+                        title={
+                          character
+                            ? `Character: ${character.fullName}`
+                            : 'Character Mention'
+                        }
+                      >
+                        {
+                          segment.value
+                        }
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <React.Fragment
+                      key={`text-${index}`}
+                    >
+                      {
+                        segment.value
+                      }
+                    </React.Fragment>
+                  );
+                }
+              )}
+            </div>
+
+            {/* ==================================================
+                REAL TEXTAREA
+                ================================================== */}
+
+            <textarea
+              id="editor-manuscript-textarea"
+              ref={textareaRef}
+              value={content}
+              onChange={
+                handleContentChange
+              }
+              onScroll={
+                handleMentionHighlightScroll
+              }
+              placeholder="Mulai tuliskan kisah petualangan, dialog menegangkan, atau monolog karaktermu di sini..."
+              style={{
+                fontFamily:
+                  fontFamily ===
+                  'serif'
+                    ? "'Cinzel', serif, Georgia, 'Times New Roman'"
+                    : fontFamily ===
+                      'mono'
+                    ? "'JetBrains Mono', monospace"
+                    : "'Plus Jakarta Sans', sans-serif",
+                fontSize: `${fontSize}px`,
+                lineHeight:
+                  lineSpacing,
+              }}
+              className="relative z-10 w-full h-full min-h-[480px] bg-transparent text-transparent caret-[#FAF7EE] outline-none resize-none placeholder-[#4E4E66] selection:bg-[#D4AF37]/40 selection:text-transparent"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        {/* ======================================================
+            CHARACTER MENTION PANEL
+            ====================================================== */}
+
+        {isMentionPanelOpen && (
+          <CharacterMentionPanel
+            characters={
+              activeBookCharacters
+            }
+            mentions={mentions}
+            content={content}
+            disabled={
+              mentionOperationLoading
+            }
+            onNavigate={
+              handleNavigateToMention
+            }
+            onRemove={
+              handleRemoveMention
+            }
+            onClose={() =>
+              setIsMentionPanelOpen(
+                false
+              )
+            }
+          />
+        )}
       </div>
+
+      {/* ======================================================
+          HISTORY DRAWER
+          ====================================================== */}
 
       {isHistoryDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs">
@@ -1874,10 +3213,11 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
             </div>
 
             <p className="text-xs text-[#8E8EA4] mb-4">
-              Novel's Creator secara otomatis
-              mengamankan snapshot naskahmu. Jika
-              kamu salah menghapus teks, pulihkan
-              versi sebelumnya dengan satu klik:
+              Novel's Creator secara
+              otomatis mengamankan snapshot
+              naskahmu. Jika kamu salah
+              menghapus teks, pulihkan versi
+              sebelumnya dengan satu klik:
             </p>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">
@@ -1891,8 +3231,8 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
                 0 ? (
                 <div className="py-12 text-center text-[#6E6E85]">
                   <p className="text-xs">
-                    Belum ada riwayat snapshot
-                    untuk bab ini.
+                    Belum ada riwayat
+                    snapshot untuk bab ini.
                   </p>
                 </div>
               ) : (
@@ -1910,14 +3250,18 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
                             [],
                             {
                               hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit',
+                              minute:
+                                '2-digit',
+                              second:
+                                '2-digit',
                             }
                           )}
                         </span>
 
                         <span className="text-[11px] text-[#8E8EA4] font-mono">
-                          {snap.wordCount}{' '}
+                          {
+                            snap.wordCount
+                          }{' '}
                           kata
                         </span>
                       </div>
@@ -1938,7 +3282,7 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
 
                       <button
                         onClick={() =>
-                          handleRestoreSnapshot(
+                          void handleRestoreSnapshot(
                             snap
                           )
                         }
@@ -1947,7 +3291,8 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
                         <RotateCcw className="w-3.5 h-3.5" />
 
                         <span>
-                          Pulihkan Versi Ini
+                          Pulihkan Versi
+                          Ini
                         </span>
                       </button>
                     </div>
@@ -1961,3 +3306,5 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     </div>
   );
 };
+
+export default NovelEditorView;
