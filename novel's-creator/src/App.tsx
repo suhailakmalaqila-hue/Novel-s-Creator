@@ -438,7 +438,7 @@ function AdminDashboardView({
                   previous.map(
                     (item) =>
                       item.id ===
-                      editingUser.id
+                        editingUser.id
                         ? response.data
                         : item
                   )
@@ -449,7 +449,7 @@ function AdminDashboardView({
 
             setSuccessMessage(
               response.message ||
-                "User berhasil diperbarui."
+              "User berhasil diperbarui."
             );
           } else {
             const response =
@@ -489,7 +489,7 @@ function AdminDashboardView({
 
             setSuccessMessage(
               response.message ||
-                "User berhasil dibuat."
+              "User berhasil dibuat."
             );
           }
 
@@ -588,7 +588,7 @@ function AdminDashboardView({
 
           setSuccessMessage(
             response.message ||
-              "User berhasil dihapus."
+            "User berhasil dihapus."
           );
 
           /**
@@ -799,11 +799,10 @@ function AdminDashboardView({
               className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-[#303046] bg-[#171724] hover:bg-[#222234] hover:border-[#D4AF37]/40 disabled:opacity-50 disabled:cursor-not-allowed text-xs text-[#D8D8E8] transition-colors"
             >
               <RefreshCw
-                className={`w-4 h-4 ${
-                  loading
+                className={`w-4 h-4 ${loading
                     ? "animate-spin"
                     : ""
-                }`}
+                  }`}
               />
 
               <span>
@@ -1029,7 +1028,7 @@ function AdminDashboardView({
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-[#171724] border border-[#34344A] flex items-center justify-center shrink-0">
                                 {item.role ===
-                                "admin" ? (
+                                  "admin" ? (
                                   <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
                                 ) : (
                                   <UserRound className="w-4 h-4 text-[#8A8A9E]" />
@@ -1073,7 +1072,7 @@ function AdminDashboardView({
 
                           <td className="px-5 py-4">
                             {item.role ===
-                            "admin" ? (
+                              "admin" ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/25 text-[10px] font-semibold text-[#D4AF37]">
                                 <ShieldCheck className="w-3 h-3" />
                                 Admin
@@ -1382,8 +1381,8 @@ function AdminDashboardView({
                       event
                         .target
                         .value as
-                        | "admin"
-                        | "user"
+                      | "admin"
+                      | "user"
                     )
                   }
                   disabled={
@@ -1391,7 +1390,7 @@ function AdminDashboardView({
                     (
                       !!editingUser &&
                       editingUser.id ===
-                        currentUser.id
+                      currentUser.id
                     )
                   }
                   className="w-full px-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] disabled:opacity-50"
@@ -1407,7 +1406,7 @@ function AdminDashboardView({
 
                 {editingUser &&
                   editingUser.id ===
-                    currentUser.id && (
+                  currentUser.id && (
                     <p className="text-[10px] text-[#77778C] mt-1.5">
                       Role akun admin yang sedang
                       digunakan tidak dapat
@@ -1599,15 +1598,15 @@ function MainAppContent() {
             targetWordCount:
               Number(
                 b.targetWordCount ??
-                  b.target_word_count ??
-                  50000
+                b.target_word_count ??
+                50000
               ),
 
             currentWordCount:
               Number(
                 b.currentWordCount ??
-                  b.current_word_count ??
-                  0
+                b.current_word_count ??
+                0
               ),
 
             coverUrl:
@@ -1617,12 +1616,12 @@ function MainAppContent() {
 
             genres: Array.isArray(b.genres)
               ? b.genres
-                  .map((genre: any) =>
-                    typeof genre === "string"
-                      ? genre
-                      : genre?.name
-                  )
-                  .filter(Boolean)
+                .map((genre: any) =>
+                  typeof genre === "string"
+                    ? genre
+                    : genre?.name
+                )
+                .filter(Boolean)
               : b.genre
                 ? [b.genre]
                 : [],
@@ -1769,7 +1768,7 @@ function MainAppContent() {
             "tut-dummy"
           ) ||
           targetBookId ===
-            TUTORIAL_DUMMY_BOOK_ID
+          TUTORIAL_DUMMY_BOOK_ID
         )
       ) {
         setTargetBookId(null);
@@ -1782,7 +1781,7 @@ function MainAppContent() {
             "tut-dummy"
           ) ||
           targetChapterId ===
-            TUTORIAL_DUMMY_CHAPTER_1_ID
+          TUTORIAL_DUMMY_CHAPTER_1_ID
         )
       ) {
         setTargetChapterId(null);
@@ -1843,7 +1842,7 @@ function MainAppContent() {
         (e.ctrlKey ||
           e.metaKey) &&
         e.key.toLowerCase() ===
-          "k"
+        "k"
       ) {
         e.preventDefault();
 
@@ -1856,7 +1855,7 @@ function MainAppContent() {
         (e.ctrlKey ||
           e.metaKey) &&
         e.key.toLowerCase() ===
-          "m"
+        "m"
       ) {
         e.preventDefault();
 
@@ -1972,8 +1971,8 @@ function MainAppContent() {
       async (book: Book) => {
         const targetWords = Number(
           book.targetWordCount ??
-            (book as any).target_word_count ??
-            50000
+          (book as any).target_word_count ??
+          50000
         );
 
         const coverUrl =
@@ -2195,7 +2194,7 @@ function MainAppContent() {
 
         const bookChapters =
           chaptersByBook[
-            targetBookId
+          targetBookId
           ] ?? [];
 
         const chapter =
@@ -2279,16 +2278,16 @@ function MainAppContent() {
           const previousCharacter =
             isPersistedCharacter
               ? characters.find(
-                  (item) => item.id === character.id
-                )
+                (item) => item.id === character.id
+              )
               : undefined;
 
           const savedCharacter =
             isPersistedCharacter
               ? await editCharacter(
-                  character.id,
-                  payload
-                )
+                character.id,
+                payload
+              )
               : await addCharacter(payload);
 
           // Backend branch repair/fix memiliki endpoint terpisah
@@ -2498,25 +2497,25 @@ function MainAppContent() {
   const userProfileForUI: UserAuthorProfile | null =
     user
       ? {
-          id: user.id,
-          username: user.email,
-          email: user.email,
-          authorName: user.author_name ?? "",
-          penName: user.pen_name ?? "",
-          bio: user.bio ?? "",
-          avatarUrl: user.avatar_url ?? "",
-          dailyWordGoal: Number(user.daily_word_goal ?? 0),
-          todayWordCount: Number(user.today_word_count ?? 0),
-          lastActiveDate:
-            user.last_active_date ??
-            new Date().toISOString().split("T")[0],
-          theme: "dark",
-          soundEffects: user.sound_effects ?? true,
-          preferredGenre: user.preferred_genre ?? undefined,
-          hasCompletedTutorial: Boolean(user.tutorial_completed),
-          isAuthenticated: isAuthenticated,
-          createdAt: user.created_at ?? new Date().toISOString(),
-        }
+        id: user.id,
+        username: user.email,
+        email: user.email,
+        authorName: user.author_name ?? "",
+        penName: user.pen_name ?? "",
+        bio: user.bio ?? "",
+        avatarUrl: user.avatar_url ?? "",
+        dailyWordGoal: Number(user.daily_word_goal ?? 0),
+        todayWordCount: Number(user.today_word_count ?? 0),
+        lastActiveDate:
+          user.last_active_date ??
+          new Date().toISOString().split("T")[0],
+        theme: "dark",
+        soundEffects: user.sound_effects ?? true,
+        preferredGenre: user.preferred_genre ?? undefined,
+        hasCompletedTutorial: Boolean(user.tutorial_completed),
+        isAuthenticated: isAuthenticated,
+        createdAt: user.created_at ?? new Date().toISOString(),
+      }
       : null;
 
   const isDummyActive =
@@ -2524,25 +2523,25 @@ function MainAppContent() {
 
   const displayBooks =
     isDummyActive &&
-    books.length === 0
+      books.length === 0
       ? TUTORIAL_DUMMY_BOOKS
       : books;
 
   const displayChapters =
     isDummyActive &&
-    chapters.length === 0
+      chapters.length === 0
       ? TUTORIAL_DUMMY_CHAPTERS
       : chapters;
 
   const displayCharacters =
     isDummyActive &&
-    characters.length === 0
+      characters.length === 0
       ? TUTORIAL_DUMMY_CHARACTERS
       : characters;
 
   const displayQuickNotes =
     isDummyActive &&
-    quickNotes.length === 0
+      quickNotes.length === 0
       ? TUTORIAL_DUMMY_QUICK_NOTES
       : quickNotes;
 
@@ -2574,7 +2573,7 @@ function MainAppContent() {
       if (
         isDummyActive &&
         displayBooks.length >
-          0
+        0
       ) {
         return displayBooks[0]
           .id;
@@ -2612,15 +2611,15 @@ function MainAppContent() {
       const availableChapters =
         isDummyBook
           ? displayChapters.filter(
-              (chapter) =>
-                chapter.bookId ===
-                activeEditorBookId
-            )
+            (chapter) =>
+              chapter.bookId ===
+              activeEditorBookId
+          )
           : (
-              chaptersByBook[
-                activeEditorBookId
-              ] ?? []
-            );
+            chaptersByBook[
+            activeEditorBookId
+            ] ?? []
+          );
 
       if (
         targetChapterId &&
@@ -2693,15 +2692,15 @@ function MainAppContent() {
     const availableChapters =
       isDummyBook
         ? displayChapters.filter(
-            (chapter) =>
-              chapter.bookId ===
-              targetBookId
-          )
+          (chapter) =>
+            chapter.bookId ===
+            targetBookId
+        )
         : (
-            chaptersByBook[
-              targetBookId
-            ] ?? []
-          );
+          chaptersByBook[
+          targetBookId
+          ] ?? []
+        );
 
     const chapterExists =
       availableChapters.some(
@@ -2860,124 +2859,124 @@ function MainAppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {currentView ===
           "workspace" && (
-          <WorkspaceView
-            books={
-              displayBooks
-            }
-            chapters={
-              displayChapters
-            }
-            chaptersByBook={
-              chaptersByBook
-            }
-            loadingByBook={
-              loadingByBook
-            }
-            activeBookId={
-              targetBookId
-            }
-            customGenres={
-              customGenres
-            }
-            userProfile={
-              userProfileForUI
-            }
-            onSaveBook={
-              handleSaveBook
-            }
-            onDeleteBook={
-              handleDeleteBook
-            }
-            onSaveChapter={
-              handleSaveChapter
-            }
-            onDeleteChapter={
-              handleDeleteChapter
-            }
-            onAddCustomGenre={
-              handleAddCustomGenre
-            }
-            onOpenEditor={
-              handleOpenEditor
-            }
-            onSelectBook={(
-              bookId
-            ) => {
-              setTargetBookId(
+            <WorkspaceView
+              books={
+                displayBooks
+              }
+              chapters={
+                displayChapters
+              }
+              chaptersByBook={
+                chaptersByBook
+              }
+              loadingByBook={
+                loadingByBook
+              }
+              activeBookId={
+                targetBookId
+              }
+              customGenres={
+                customGenres
+              }
+              userProfile={
+                userProfileForUI
+              }
+              onSaveBook={
+                handleSaveBook
+              }
+              onDeleteBook={
+                handleDeleteBook
+              }
+              onSaveChapter={
+                handleSaveChapter
+              }
+              onDeleteChapter={
+                handleDeleteChapter
+              }
+              onAddCustomGenre={
+                handleAddCustomGenre
+              }
+              onOpenEditor={
+                handleOpenEditor
+              }
+              onSelectBook={(
                 bookId
-              );
+              ) => {
+                setTargetBookId(
+                  bookId
+                );
 
-              setTargetChapterId(
-                null
-              );
-            }}
-            onOpenCharactersWiki={() =>
-              setCurrentView(
-                "characters"
-              )
-            }
-          />
-        )}
+                setTargetChapterId(
+                  null
+                );
+              }}
+              onOpenCharactersWiki={() =>
+                setCurrentView(
+                  "characters"
+                )
+              }
+            />
+          )}
 
         {currentView ===
           "characters" && (
-          <CharacterWikiView
-            characters={
-              displayCharacters
-            }
-            books={
-              displayBooks
-            }
-            onSaveCharacter={
-              handleSaveCharacter
-            }
-            onDeleteCharacter={
-              handleDeleteCharacter
-            }
-          />
-        )}
+            <CharacterWikiView
+              characters={
+                displayCharacters
+              }
+              books={
+                displayBooks
+              }
+              onSaveCharacter={
+                handleSaveCharacter
+              }
+              onDeleteCharacter={
+                handleDeleteCharacter
+              }
+            />
+          )}
 
         {currentView ===
           "editor" && (
-          <NovelEditorView
-            books={
-              displayBooks
-            }
-            chapters={
-              displayChapters
-            }
-            chaptersByBook={
-              chaptersByBook
-            }
-            initialBookId={
-              activeEditorBookId
-            }
-            initialChapterId={
-              activeEditorChapterId
-            }
-            userProfile={
-              userProfileForUI
-            }
-            onSaveChapter={
-              handleSaveChapter
-            }
-            onSelectBook={(
-              bookId
-            ) => {
-              setTargetBookId(
+            <NovelEditorView
+              books={
+                displayBooks
+              }
+              chapters={
+                displayChapters
+              }
+              chaptersByBook={
+                chaptersByBook
+              }
+              initialBookId={
+                activeEditorBookId
+              }
+              initialChapterId={
+                activeEditorChapterId
+              }
+              userProfile={
+                userProfileForUI
+              }
+              onSaveChapter={
+                handleSaveChapter
+              }
+              onSelectBook={(
                 bookId
-              );
+              ) => {
+                setTargetBookId(
+                  bookId
+                );
 
-              setTargetChapterId(
-                null
-              );
+                setTargetChapterId(
+                  null
+                );
 
-              setCurrentView(
-                "workspace"
-              );
-            }}
-          />
-        )}
+                setCurrentView(
+                  "workspace"
+                );
+              }}
+            />
+          )}
       </main>
 
       <footer className="h-10 bg-[#1E1E2E] border-t border-[#2A2A3C] flex items-center justify-between px-4 sm:px-8 text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 shrink-0">
@@ -3039,116 +3038,29 @@ function MainAppContent() {
       />
 
       <GlobalSearchModal
-        isOpen={
-          isSearchOpen
-        }
-        books={
-          displayBooks
-        }
-        chapters={
-          displayChapters
-        }
-        characters={
-          displayCharacters
-        }
-        notes={
-          displayQuickNotes
-        }
-        onClose={() =>
-          setIsSearchOpen(
-            false
-          )
-        }
-        onSelectBook={(
-          bookId
-        ) => {
-          const bookExists =
-            displayBooks.some(
-              (book) =>
-                book.id ===
-                bookId
-            );
-
-          if (!bookExists) {
-            return;
-          }
-
-          setTargetBookId(
-            bookId
-          );
-
-          setTargetChapterId(
-            null
-          );
-
-          setCurrentView(
-            "workspace"
-          );
+        isOpen={isSearchOpen}
+        books={displayBooks}
+        chapters={displayChapters}
+        characters={displayCharacters}
+        notes={displayQuickNotes}
+        onClose={() => {
+          setIsSearchOpen(false);
         }}
-        onSelectChapter={(
-          bookId,
-          chapterId
-        ) => {
-          const bookExists =
-            displayBooks.some(
-              (book) =>
-                book.id ===
-                bookId
-            );
-
-          if (!bookExists) {
-            return;
-          }
-
-          const isDummyBook =
-            isDummyActive &&
-            TUTORIAL_DUMMY_BOOKS.some(
-              (book) =>
-                book.id ===
-                bookId
-            );
-
-          const availableChapters =
-            isDummyBook
-              ? displayChapters.filter(
-                  (chapter) =>
-                    chapter.bookId ===
-                    bookId
-                )
-              : (
-                  chaptersByBook[
-                    bookId
-                  ] ?? []
-                );
-
-          const chapterExists =
-            availableChapters.some(
-              (chapter) =>
-                chapter.id ===
-                chapterId
-            );
-
-          if (!chapterExists) {
-            return;
-          }
-
-          setTargetBookId(
-            bookId
-          );
-
-          setTargetChapterId(
-            chapterId
-          );
-
-          setCurrentView(
-            "editor"
-          );
+        onSelectBook={(bId) => {
+          setTargetBookId(bId);
+          setCurrentView('workspace');
         }}
-        onSelectCharacter={() =>
-          setCurrentView(
-            "characters"
-          )
-        }
+        onSelectChapter={(bId, cId) => {
+          setTargetBookId(bId);
+          setTargetChapterId(cId);
+          setCurrentView('editor');
+        }}
+        onSelectCharacter={() => {
+          setCurrentView('characters');
+        }}
+        onSelectNote={() => {
+          setIsQuickNotesOpen(true);
+        }}
       />
 
       <VisualNovelTutorial

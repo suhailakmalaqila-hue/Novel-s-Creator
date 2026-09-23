@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Book, Chapter, CharacterWiki, QuickNote } from '../../types';
+import {
+  Book,
+  Chapter,
+  CharacterWiki,
+  QuickNote,
+} from '../../types';
 import {
   Search,
   X,
@@ -8,7 +13,6 @@ import {
   User,
   StickyNote,
   ArrowRight,
-  Sparkles,
 } from 'lucide-react';
 
 interface GlobalSearchModalProps {
@@ -21,6 +25,7 @@ interface GlobalSearchModalProps {
   onSelectBook: (bookId: string) => void;
   onSelectChapter: (bookId: string, chapterId: string) => void;
   onSelectCharacter: (char: CharacterWiki) => void;
+  onSelectNote: (note: QuickNote) => void;
 }
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
@@ -33,6 +38,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   onSelectBook,
   onSelectChapter,
   onSelectCharacter,
+  onSelectNote,
 }) => {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +84,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           c.personalityTraits.toLowerCase().includes(q) ||
           c.customAttributes.some(
             (a) =>
-              a.key.toLowerCase().includes(q) || a.value.toLowerCase().includes(q)
+              a.key.toLowerCase().includes(q) ||
+              a.value.toLowerCase().includes(q)
           )
       )
     : [];
@@ -110,6 +117,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         {/* Search Bar Input */}
         <div className="flex items-center px-4 py-3 bg-[#181826] border-b border-[#2A2A3C]">
           <Search className="w-5 h-5 text-[#D4AF37] mr-3 shrink-0" />
+
           <input
             ref={inputRef}
             type="text"
@@ -118,14 +126,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             placeholder="Cari buku, bab naskah, karakter wiki, atau catatan kilat... (Esc untuk batal)"
             className="w-full bg-transparent text-sm text-[#FAF7EE] placeholder-[#6E6E85] outline-none"
           />
+
           {query && (
             <button
+              type="button"
               onClick={() => setQuery('')}
               className="p-1 text-[#7E7E94] hover:text-[#FAF7EE] rounded-lg mr-2"
             >
               <X className="w-4 h-4" />
             </button>
           )}
+
           <span className="text-[10px] text-[#6E6E85] font-mono border border-[#2A2A3C] px-1.5 py-0.5 rounded">
             ESC
           </span>
@@ -136,13 +147,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           {!query ? (
             <div className="py-12 text-center text-[#6E6E85] space-y-2">
               <Search className="w-8 h-8 mx-auto text-[#D4AF37]/40" />
+
               <p className="text-xs">
                 Ketik nama buku, bab, tokoh, atribut khusus, atau isi catatan untuk mencari di seluruh database.
               </p>
             </div>
           ) : totalResults === 0 ? (
             <div className="py-12 text-center text-[#8E8EA4]">
-              <p className="text-sm">Tidak ditemukan hasil untuk "{query}".</p>
+              <p className="text-sm">
+                Tidak ditemukan hasil untuk "{query}".
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -151,12 +165,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-[#D4AF37] mb-2 flex items-center gap-1.5">
                     <BookOpen className="w-3.5 h-3.5" />
-                    <span>Buku Proyek ({matchedBooks.length})</span>
+                    <span>
+                      Buku Proyek ({matchedBooks.length})
+                    </span>
                   </div>
+
                   <div className="space-y-1.5">
                     {matchedBooks.map((b) => (
                       <button
                         key={b.id}
+                        type="button"
                         onClick={() => {
                           onSelectBook(b.id);
                           onClose();
@@ -167,10 +185,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           <div className="text-xs font-semibold text-[#FAF7EE] group-hover:text-[#D4AF37]">
                             {b.title}
                           </div>
+
                           <div className="text-[11px] text-[#8E8EA4] line-clamp-1">
                             {b.synopsis || 'Tanpa sinopsis'}
                           </div>
                         </div>
+
                         <ArrowRight className="w-4 h-4 text-[#6E6E85] group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform" />
                       </button>
                     ))}
@@ -183,12 +203,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-[#D4AF37] mb-2 flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Bab Naskah ({matchedChapters.length})</span>
+
+                    <span>
+                      Bab Naskah ({matchedChapters.length})
+                    </span>
                   </div>
+
                   <div className="space-y-1.5">
                     {matchedChapters.map((c) => (
                       <button
                         key={c.id}
+                        type="button"
                         onClick={() => {
                           onSelectChapter(c.bookId, c.id);
                           onClose();
@@ -199,10 +224,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           <div className="text-xs font-semibold text-[#FAF7EE] group-hover:text-[#D4AF37]">
                             Bab {c.chapterNumber}: {c.title}
                           </div>
+
                           <div className="text-[11px] text-[#8E8EA4] font-mono">
                             {c.wordCount} kata • Status: {c.status}
                           </div>
                         </div>
+
                         <ArrowRight className="w-4 h-4 text-[#6E6E85] group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform" />
                       </button>
                     ))}
@@ -215,12 +242,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-[#D4AF37] mb-2 flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5" />
-                    <span>Karakter Wiki ({matchedCharacters.length})</span>
+
+                    <span>
+                      Karakter Wiki ({matchedCharacters.length})
+                    </span>
                   </div>
+
                   <div className="space-y-1.5">
                     {matchedCharacters.map((char) => (
                       <button
                         key={char.id}
+                        type="button"
                         onClick={() => {
                           onSelectCharacter(char);
                           onClose();
@@ -239,6 +271,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                               <User className="w-3.5 h-3.5 text-[#D4AF37]" />
                             )}
                           </div>
+
                           <div>
                             <div className="text-xs font-semibold text-[#FAF7EE] group-hover:text-[#D4AF37]">
                               {char.fullName}{' '}
@@ -248,11 +281,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 </span>
                               )}
                             </div>
+
                             <div className="text-[10px] text-[#D4AF37]">
                               {char.roleTag} • {char.status}
                             </div>
                           </div>
                         </div>
+
                         <ArrowRight className="w-4 h-4 text-[#6E6E85] group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform" />
                       </button>
                     ))}
@@ -265,21 +300,37 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-[#D4AF37] mb-2 flex items-center gap-1.5">
                     <StickyNote className="w-3.5 h-3.5" />
-                    <span>Catatan Kilat ({matchedNotes.length})</span>
+
+                    <span>
+                      Catatan Kilat ({matchedNotes.length})
+                    </span>
                   </div>
+
                   <div className="space-y-1.5">
                     {matchedNotes.map((n) => (
-                      <div
+                      <button
                         key={n.id}
-                        className="p-2.5 bg-[#161624] border border-[#2A2A3C] rounded-xl text-left"
+                        type="button"
+                        onClick={() => {
+                          onSelectNote(n);
+                          onClose();
+                        }}
+                        className="w-full p-2.5 bg-[#161624] hover:bg-[#252538] border border-[#2A2A3C] rounded-xl text-left transition-colors cursor-pointer group"
                       >
-                        <div className="text-xs font-semibold text-[#FAF7EE]">
-                          {n.title}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-[#FAF7EE] group-hover:text-[#D4AF37]">
+                              {n.title}
+                            </div>
+
+                            <div className="text-[11px] text-[#8E8EA4] line-clamp-2 mt-0.5">
+                              {n.content}
+                            </div>
+                          </div>
+
+                          <ArrowRight className="w-4 h-4 text-[#6E6E85] group-hover:text-[#D4AF37] group-hover:translate-x-0.5 transition-transform shrink-0" />
                         </div>
-                        <div className="text-[11px] text-[#8E8EA4] line-clamp-2 mt-0.5">
-                          {n.content}
-                        </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
