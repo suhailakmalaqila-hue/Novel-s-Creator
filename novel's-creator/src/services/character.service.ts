@@ -1,8 +1,10 @@
 import { apiRequest } from "./api";
+
 import {
   CharacterWiki,
   CharacterRelationship,
   CustomAttribute,
+  CharacterMention,
 } from "../types";
 
 function mapCharacter(data: any): CharacterWiki {
@@ -60,6 +62,69 @@ function mapCharacter(data: any): CharacterWiki {
     updatedAt: new Date(
       data.updated_at
     ).getTime(),
+  };
+}
+
+/**
+ * ============================================================
+ * CHARACTER MENTION MAPPER
+ * ============================================================
+ *
+ * Backend menggunakan snake_case dari PostgreSQL/API.
+ * Frontend menggunakan camelCase.
+ *
+ * Jangan mengembalikan response mention mentah ke React.
+ */
+function mapCharacterMention(
+  data: any
+): CharacterMention {
+  return {
+    id: String(data.id),
+
+    chapterId:
+      data.chapterId ??
+      data.chapter_id ??
+      "",
+
+    characterId:
+      data.characterId ??
+      data.character_id ??
+      "",
+
+    displayText:
+      data.displayText ??
+      data.display_text ??
+      "",
+
+    startOffset:
+      data.startOffset ??
+      data.start_offset ??
+      undefined,
+
+    endOffset:
+      data.endOffset ??
+      data.end_offset ??
+      undefined,
+
+    characterName:
+      data.characterName ??
+      data.character_name ??
+      undefined,
+
+    characterAlias:
+      data.characterAlias ??
+      data.character_alias ??
+      undefined,
+
+    createdAt: data.createdAt
+      ? new Date(
+          data.createdAt
+        ).getTime()
+      : data.created_at
+      ? new Date(
+          data.created_at
+        ).getTime()
+      : Date.now(),
   };
 }
 
@@ -251,6 +316,10 @@ export async function deleteCustomAttribute(
   );
 }
 
+/* ============================================================
+   CHARACTER MENTION
+   ============================================================ */
+
 export interface CharacterMentionInput {
   characterId: string;
   displayText: string;
@@ -268,9 +337,13 @@ export interface CharacterMentionUpdateInput {
 export async function getMentions(
   bookId: string,
   chapterId: string
-) {
-  return apiRequest<any[]>(
+): Promise<CharacterMention[]> {
+  const response = await apiRequest<any[]>(
     `/books/${bookId}/chapters/${chapterId}/mentions`
+  );
+
+  return response.map(
+    mapCharacterMention
   );
 }
 
@@ -278,13 +351,18 @@ export async function createMention(
   bookId: string,
   chapterId: string,
   input: CharacterMentionInput
-) {
-  return apiRequest<any>(
-    `/books/${bookId}/chapters/${chapterId}/mentions`,
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    }
+): Promise<CharacterMention> {
+  const response =
+    await apiRequest<any>(
+      `/books/${bookId}/chapters/${chapterId}/mentions`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    );
+
+  return mapCharacterMention(
+    response
   );
 }
 
@@ -293,13 +371,18 @@ export async function updateMention(
   chapterId: string,
   mentionId: string,
   input: CharacterMentionUpdateInput
-) {
-  return apiRequest<any>(
-    `/books/${bookId}/chapters/${chapterId}/mentions/${mentionId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    }
+): Promise<CharacterMention> {
+  const response =
+    await apiRequest<any>(
+      `/books/${bookId}/chapters/${chapterId}/mentions/${mentionId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }
+    );
+
+  return mapCharacterMention(
+    response
   );
 }
 
@@ -307,8 +390,8 @@ export async function deleteMention(
   bookId: string,
   chapterId: string,
   mentionId: string
-) {
-  return apiRequest(
+): Promise<void> {
+  await apiRequest(
     `/books/${bookId}/chapters/${chapterId}/mentions/${mentionId}`,
     {
       method: "DELETE",

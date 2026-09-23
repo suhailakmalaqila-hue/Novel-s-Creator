@@ -47,17 +47,13 @@ import {
   Clock,
   RotateCcw,
   X,
-  AtSign,
   PanelRight,
 } from 'lucide-react';
 
 interface NovelEditorViewProps {
   books: Book[];
   chapters: Chapter[];
-  chaptersByBook: Record<
-    string,
-    Chapter[]
-  >;
+  chaptersByBook: Record<string, Chapter[]>;
   initialBookId?: string | null;
   initialChapterId?: string | null;
   userProfile: UserAuthorProfile | null;
@@ -107,20 +103,18 @@ export const NovelEditorView: React.FC<
    * ============================================================
    */
 
-  const resolvedInitialBookId =
-    useMemo(() => {
-      if (
-        initialBookId &&
-        books.some(
-          (book) =>
-            book.id === initialBookId
-        )
-      ) {
-        return initialBookId;
-      }
+  const resolvedInitialBookId = useMemo(() => {
+    if (
+      initialBookId &&
+      books.some(
+        (book) => book.id === initialBookId
+      )
+    ) {
+      return initialBookId;
+    }
 
-      return books[0]?.id || '';
-    }, [initialBookId, books]);
+    return books[0]?.id || '';
+  }, [initialBookId, books]);
 
   const [
     selectedBookId,
@@ -135,38 +129,32 @@ export const NovelEditorView: React.FC<
       return;
     }
 
-    setSelectedBookId(
-      (currentBookId) => {
-        if (
-          currentBookId ===
-          resolvedInitialBookId
-        ) {
-          return currentBookId;
-        }
-
-        return resolvedInitialBookId;
+    setSelectedBookId((currentBookId) => {
+      if (
+        currentBookId ===
+        resolvedInitialBookId
+      ) {
+        return currentBookId;
       }
-    );
+
+      return resolvedInitialBookId;
+    });
   }, [resolvedInitialBookId]);
 
-  const availableChapters =
-    useMemo(() => {
-      if (!selectedBookId) {
-        return [];
-      }
+  const availableChapters = useMemo(() => {
+    if (!selectedBookId) {
+      return [];
+    }
 
-      return [
-        ...(chaptersByBook[
-          selectedBookId
-        ] ?? []),
-      ].sort(
-        (a, b) =>
-          a.order - b.order
-      );
-    }, [
-      chaptersByBook,
-      selectedBookId,
-    ]);
+    return [
+      ...(chaptersByBook[selectedBookId] ?? []),
+    ].sort(
+      (a, b) => a.order - b.order
+    );
+  }, [
+    chaptersByBook,
+    selectedBookId,
+  ]);
 
   const resolvedInitialChapterId =
     useMemo(() => {
@@ -219,31 +207,30 @@ export const NovelEditorView: React.FC<
     resolvedInitialChapterId,
   ]);
 
-  const activeChapter =
-    useMemo(() => {
-      if (
-        !selectedBookId ||
-        !selectedChapterId
-      ) {
-        return null;
-      }
+  const activeChapter = useMemo(() => {
+    if (
+      !selectedBookId ||
+      !selectedChapterId
+    ) {
+      return null;
+    }
 
-      return (
-        (
-          chaptersByBook[
-            selectedBookId
-          ] ?? []
-        ).find(
-          (chapter) =>
-            chapter.id ===
-            selectedChapterId
-        ) || null
-      );
-    }, [
-      chaptersByBook,
-      selectedBookId,
-      selectedChapterId,
-    ]);
+    return (
+      (
+        chaptersByBook[
+          selectedBookId
+        ] ?? []
+      ).find(
+        (chapter) =>
+          chapter.id ===
+          selectedChapterId
+      ) || null
+    );
+  }, [
+    chaptersByBook,
+    selectedBookId,
+    selectedChapterId,
+  ]);
 
   /*
    * ============================================================
@@ -251,17 +238,15 @@ export const NovelEditorView: React.FC<
    * ============================================================
    */
 
-  const snapshotKey =
-    activeChapter
-      ? `${activeChapter.bookId}:${activeChapter.id}`
-      : '';
+  const snapshotKey = activeChapter
+    ? `${activeChapter.bookId}:${activeChapter.id}`
+    : '';
 
-  const activeSnapshots =
-    snapshotKey
-      ? snapshotsByChapter[
-          snapshotKey
-        ] ?? []
-      : [];
+  const activeSnapshots = snapshotKey
+    ? snapshotsByChapter[
+        snapshotKey
+      ] ?? []
+    : [];
 
   const activeSnapshotsLoading =
     snapshotKey
@@ -1283,15 +1268,6 @@ export const NovelEditorView: React.FC<
             continue;
           }
 
-          /*
-           * Pure insertion.
-           *
-           * Teks yang berada sebelum
-           * titik insertion tetap.
-           *
-           * Mention pada/setelah titik
-           * insertion ikut bergeser.
-           */
           if (isPureInsertion) {
             if (
               end <=
@@ -1328,12 +1304,6 @@ export const NovelEditorView: React.FC<
               continue;
             }
 
-            /*
-             * Insertion berada di
-             * tengah mention.
-             *
-             * Offset tidak lagi aman.
-             */
             try {
               await removeMention(
                 activeChapter.bookId,
@@ -1350,9 +1320,6 @@ export const NovelEditorView: React.FC<
             continue;
           }
 
-          /*
-           * Mention sebelum perubahan.
-           */
           if (
             end <=
             prefixLength
@@ -1360,9 +1327,6 @@ export const NovelEditorView: React.FC<
             continue;
           }
 
-          /*
-           * Mention setelah perubahan.
-           */
           if (
             start >=
             oldChangeEnd
@@ -1391,10 +1355,6 @@ export const NovelEditorView: React.FC<
             continue;
           }
 
-          /*
-           * Mention terkena replacement/
-           * deletion.
-           */
           try {
             await removeMention(
               activeChapter.bookId,
@@ -1593,6 +1553,19 @@ export const NovelEditorView: React.FC<
    * ============================================================
    * CREATE CHARACTER MENTION
    * ============================================================
+   *
+   * IMPORTANT:
+   *
+   * Selection dari CharacterMentionPicker tidak lagi menjadi
+   * sumber utama offset.
+   *
+   * Sumber utama:
+   *
+   *   textareaRef.current.selectionStart
+   *   textareaRef.current.selectionEnd
+   *
+   * Hal ini mencegah selection stale setelah user berinteraksi
+   * dengan picker/search sebelum memilih character.
    */
 
   const handleCreateCharacterMention =
@@ -1606,13 +1579,81 @@ export const NovelEditorView: React.FC<
           return;
         }
 
+        const textarea =
+          textareaRef.current;
+
         const originalContent =
           contentRef.current;
+
+        /*
+         * ======================================================
+         * AMBIL SELECTION AKTUAL DARI TEXTAREA
+         * ======================================================
+         *
+         * Parameter dari picker tetap dipakai sebagai fallback.
+         */
+
+        let actualSelectionStart =
+          selectionStart;
+
+        let actualSelectionEnd =
+          selectionEnd;
+
+        if (textarea) {
+          const textareaStart =
+            textarea.selectionStart;
+
+          const textareaEnd =
+            textarea.selectionEnd;
+
+          /*
+           * Browser menyimpan selection textarea meskipun
+           * focus kemudian berpindah ke tombol/search picker.
+           *
+           * Karena itu ini lebih reliable daripada selection
+           * yang dikirim oleh picker.
+           */
+
+          if (
+            Number.isFinite(
+              textareaStart
+            ) &&
+            Number.isFinite(
+              textareaEnd
+            )
+          ) {
+            actualSelectionStart =
+              textareaStart;
+
+            actualSelectionEnd =
+              textareaEnd;
+          }
+        }
+
+        /*
+         * Pastikan selection tidak terbalik.
+         */
+
+        const normalizedStart =
+          Math.min(
+            actualSelectionStart,
+            actualSelectionEnd
+          );
+
+        const normalizedEnd =
+          Math.max(
+            actualSelectionStart,
+            actualSelectionEnd
+          );
+
+        /*
+         * Clamp ke panjang content TERKINI.
+         */
 
         const safeStart = Math.max(
           0,
           Math.min(
-            selectionStart,
+            normalizedStart,
             originalContent.length
           )
         );
@@ -1620,7 +1661,7 @@ export const NovelEditorView: React.FC<
         const safeEnd = Math.max(
           safeStart,
           Math.min(
-            selectionEnd,
+            normalizedEnd,
             originalContent.length
           )
         );
@@ -1628,11 +1669,22 @@ export const NovelEditorView: React.FC<
         const hasSelection =
           safeEnd > safeStart;
 
+        /*
+         * ======================================================
+         * IMPORTANT VALIDATION
+         * ======================================================
+         *
+         * Kalau user memilih teks, displayText HARUS berasal
+         * langsung dari range content tersebut.
+         */
+
         const selectedText =
-          originalContent.slice(
-            safeStart,
-            safeEnd
-          );
+          hasSelection
+            ? originalContent.slice(
+                safeStart,
+                safeEnd
+              )
+            : '';
 
         const displayText =
           hasSelection
@@ -1658,6 +1710,15 @@ export const NovelEditorView: React.FC<
         let nextContent =
           originalContent;
 
+        /*
+         * ======================================================
+         * NO SELECTION
+         * ======================================================
+         *
+         * Jika tidak ada selection, masukkan nama character
+         * ke posisi cursor.
+         */
+
         if (!hasSelection) {
           startOffset =
             safeStart;
@@ -1677,6 +1738,55 @@ export const NovelEditorView: React.FC<
               safeStart
             );
         }
+
+        /*
+         * ======================================================
+         * FINAL OFFSET VALIDATION
+         * ======================================================
+         */
+
+        if (
+          startOffset < 0 ||
+          endOffset <= startOffset ||
+          endOffset >
+            nextContent.length
+        ) {
+          setMentionError(
+            'Posisi character mention tidak valid. Silakan pilih teks kembali.'
+          );
+
+          return;
+        }
+
+        /*
+         * Untuk selection existing, pastikan teks pada offset
+         * memang sama dengan displayText.
+         */
+
+        if (hasSelection) {
+          const offsetText =
+            originalContent.slice(
+              startOffset,
+              endOffset
+            );
+
+          if (
+            offsetText !==
+            displayText
+          ) {
+            setMentionError(
+              'Selection berubah sebelum mention dibuat. Silakan pilih teks kembali.'
+            );
+
+            return;
+          }
+        }
+
+        /*
+         * ======================================================
+         * OVERLAP CHECK
+         * ======================================================
+         */
 
         if (
           isMentionOverlapping(
@@ -1698,12 +1808,14 @@ export const NovelEditorView: React.FC<
         );
 
         try {
+          /*
+           * ====================================================
+           * NO SELECTION:
+           * INSERT CHARACTER NAME FIRST
+           * ====================================================
+           */
+
           if (!hasSelection) {
-            /*
-             * Reconcile mention lama terlebih
-             * dahulu karena kita menyisipkan
-             * nama karakter ke content.
-             */
             await reconcileMentionsAfterTextChange(
               originalContent,
               nextContent
@@ -1732,6 +1844,12 @@ export const NovelEditorView: React.FC<
               'unsaved'
             );
           }
+
+          /*
+           * ====================================================
+           * CREATE MENTION
+           * ====================================================
+           */
 
           await addMention(
             activeChapter.bookId,
@@ -1763,6 +1881,7 @@ export const NovelEditorView: React.FC<
             /*
              * Rollback content.
              */
+
             setContent(
               originalContent
             );
@@ -1789,9 +1908,9 @@ export const NovelEditorView: React.FC<
             );
 
             /*
-             * Kembalikan offset mention
-             * lama jika tadi sempat digeser.
+             * Kembalikan offset mention lama.
              */
+
             try {
               await reconcileMentionsAfterTextChange(
                 nextContent,
@@ -2010,6 +2129,11 @@ export const NovelEditorView: React.FC<
               content.length
             ),
           }))
+          .filter(
+            (item) =>
+              item.end >
+              item.start
+          )
           .sort(
             (a, b) =>
               a.start - b.start
@@ -2428,9 +2552,7 @@ export const NovelEditorView: React.FC<
           : 'space-y-4'
       }`}
     >
-      {/* ======================================================
-          BOOK / CHAPTER BAR
-          ====================================================== */}
+      {/* BOOK / CHAPTER BAR */}
 
       <div className="bg-[#1E1E2E] border border-[#2A2A3C] rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div
@@ -2636,9 +2758,7 @@ export const NovelEditorView: React.FC<
         </div>
       </div>
 
-      {/* ======================================================
-          STATS
-          ====================================================== */}
+      {/* STATS */}
 
       <div
         data-tour="editor-stats-ribbon"
@@ -2703,9 +2823,7 @@ export const NovelEditorView: React.FC<
         </div>
       </div>
 
-      {/* ======================================================
-          TOOLBAR
-          ====================================================== */}
+      {/* TOOLBAR */}
 
       <div
         data-tour="editor-export-tools"
@@ -2981,9 +3099,7 @@ export const NovelEditorView: React.FC<
         </div>
       </div>
 
-      {/* ======================================================
-          MENTION ERROR
-          ====================================================== */}
+      {/* MENTION ERROR */}
 
       {mentionError && (
         <div className="px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 flex items-center justify-between gap-3">
@@ -3005,9 +3121,7 @@ export const NovelEditorView: React.FC<
         </div>
       )}
 
-      {/* ======================================================
-          EDITOR + CHARACTER MENTION PANEL
-          ====================================================== */}
+      {/* EDITOR + CHARACTER MENTION PANEL */}
 
       <div
         className={`flex flex-col ${
@@ -3051,9 +3165,7 @@ export const NovelEditorView: React.FC<
           />
 
           <div className="relative flex-1 min-h-[480px]">
-            {/* ==================================================
-                MENTION HIGHLIGHT LAYER
-                ================================================== */}
+            {/* MENTION HIGHLIGHT LAYER */}
 
             <div
               ref={
@@ -3121,9 +3233,7 @@ export const NovelEditorView: React.FC<
               )}
             </div>
 
-            {/* ==================================================
-                REAL TEXTAREA
-                ================================================== */}
+            {/* REAL TEXTAREA */}
 
             <textarea
               id="editor-manuscript-textarea"
@@ -3155,9 +3265,7 @@ export const NovelEditorView: React.FC<
           </div>
         </div>
 
-        {/* ======================================================
-            CHARACTER MENTION PANEL
-            ====================================================== */}
+        {/* CHARACTER MENTION PANEL */}
 
         {isMentionPanelOpen && (
           <CharacterMentionPanel
@@ -3184,9 +3292,7 @@ export const NovelEditorView: React.FC<
         )}
       </div>
 
-      {/* ======================================================
-          HISTORY DRAWER
-          ====================================================== */}
+      {/* HISTORY DRAWER */}
 
       {isHistoryDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs">
