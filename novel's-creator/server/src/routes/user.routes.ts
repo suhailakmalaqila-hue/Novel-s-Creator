@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   getMyProfile,
   updateMyProfile,
+  changeMyPassword,
 } from "../controllers/user.controller";
 
 import {
@@ -21,6 +22,12 @@ router.patch(
   "/me",
   authMiddleware,
   updateMyProfile
+);
+
+router.patch(
+  "/me/password",
+  authMiddleware,
+  changeMyPassword
 );
 
 export default router;

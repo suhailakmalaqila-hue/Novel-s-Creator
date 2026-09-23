@@ -102,6 +102,54 @@ export async function updateUser(
   return result.rows[0] ?? null;
 }
 
+export async function changeUserPassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const result = await pool.query(
+    `
+      SELECT password_hash
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error("USER_NOT_FOUND");
+  }
+
+  const passwordHash = result.rows[0].password_hash;
+
+  const isCurrentPasswordValid = await bcrypt.compare(
+    currentPassword,
+    passwordHash
+  );
+
+  if (!isCurrentPasswordValid) {
+    throw new Error("INVALID_CURRENT_PASSWORD");
+  }
+
+  if (currentPassword === newPassword) {
+    throw new Error("SAME_PASSWORD");
+  }
+
+  const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+  await pool.query(
+    `
+      UPDATE users
+      SET
+        password_hash = $1,
+        updated_at = NOW()
+      WHERE id = $2
+    `,
+    [newPasswordHash, userId]
+  );
+}
+
 export async function getAllUsers() {
   const result = await pool.query(
     `

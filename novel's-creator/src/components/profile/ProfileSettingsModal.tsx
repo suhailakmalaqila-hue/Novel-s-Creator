@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UserAuthorProfile } from '../../types';
 import { exportAllDataAsJSON, importAllDataFromJSON } from '../../lib/storage';
+import { apiRequest } from '../../services/api';
 import {
   X,
   User,
@@ -8,7 +9,6 @@ import {
   Camera,
   Trash2,
   Target,
-  FileText,
   Lock,
   Download,
   UploadCloud,
@@ -60,11 +60,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [penName, setPenName] = useState(activeProfile?.penName || '');
   const [bio, setBio] = useState(activeProfile?.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(activeProfile?.avatarUrl || '');
-  const [dailyWordGoal, setDailyWordGoal] = useState(activeProfile?.dailyWordGoal || 1000);
+  const [dailyWordGoal, setDailyWordGoal] = useState(
+    activeProfile?.dailyWordGoal || 1000
+  );
 
   // Sync state when incoming profile or modal visibility changes
   React.useEffect(() => {
     const current = userProfile || profile;
+
     if (current) {
       setAuthorName(current?.authorName || '');
       setPenName(current?.penName || '');
@@ -72,13 +75,25 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       setAvatarUrl(current?.avatarUrl || '');
       setDailyWordGoal(current?.dailyWordGoal || 1000);
     }
+
+    // Reset password fields setiap kali modal dibuka / profile berubah.
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordMsg(null);
+    setSuccessMsg(null);
+    setErrorMsg(null);
   }, [userProfile, profile, isOpen]);
 
+  // Password change states
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'writing' | 'backup'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'writing' | 'backup'>(
+    'profile'
+  );
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -103,96 +118,225 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
 
     const reader = new FileReader();
+
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setAvatarUrl(reader.result);
         setErrorMsg(null);
       }
     };
+
     reader.readAsDataURL(file);
   };
 
   const handleRemoveAvatar = () => {
     setAvatarUrl('');
+
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+
     setErrorMsg(null);
     setPasswordMsg(null);
+    setSuccessMsg(null);
+
+    // ============================================================
+    // 1. VALIDASI PROFIL
+    // ============================================================
 
     if (!authorName.trim()) {
       setErrorMsg('Nama Penulis tidak boleh kosong.');
       return;
     }
 
-    if (newPassword) {
+    // ============================================================
+    // 2. VALIDASI PASSWORD
+    // ============================================================
+
+    const isChangingPassword =
+      Boolean(currentPassword) ||
+      Boolean(newPassword) ||
+      Boolean(confirmPassword);
+
+    if (isChangingPassword) {
+      if (!currentPassword.trim()) {
+        setPasswordMsg('Masukkan kata sandi saat ini.');
+        return;
+      }
+
+      if (!newPassword.trim()) {
+        setPasswordMsg('Masukkan kata sandi baru.');
+        return;
+      }
+
       if (newPassword.length < 6) {
-        setErrorMsg('Kata sandi baru minimal 6 karakter.');
+        setPasswordMsg('Kata sandi baru minimal 6 karakter.');
         return;
       }
+
       if (newPassword !== confirmPassword) {
-        setErrorMsg('Konfirmasi kata sandi baru tidak cocok.');
+        setPasswordMsg('Konfirmasi kata sandi baru tidak cocok.');
         return;
       }
-      setPasswordMsg('Kata sandi berhasil diperbarui.');
+
+      if (currentPassword === newPassword) {
+        setPasswordMsg(
+          'Kata sandi baru harus berbeda dari kata sandi saat ini.'
+        );
+        return;
+      }
     }
 
-    const baseProfile = userProfile || profile || DEFAULT_PROFILE_FALLBACK;
-    const updated: UserAuthorProfile = {
-      ...baseProfile,
-      authorName: authorName.trim(),
-      penName: penName.trim() || authorName.trim(),
-      bio: bio.trim(),
-      avatarUrl,
-      dailyWordGoal: Number(dailyWordGoal) || 1000,
-    };
+    try {
+      // ==========================================================
+      // 3. UPDATE PASSWORD KE BACKEND
+      // ==========================================================
 
-    if (onSave) onSave(updated);
-    if (onSaveProfile) onSaveProfile(updated);
-    setSuccessMsg('Profil penulis berhasil disimpan!');
-    setTimeout(() => {
-      setSuccessMsg(null);
-      onClose();
-    }, 900);
+      if (isChangingPassword) {
+        await apiRequest<{
+          success: boolean;
+          message?: string;
+        }>('/users/me/password', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            currentPassword,
+            newPassword,
+          }),
+        });
+
+        setPasswordMsg('Kata sandi berhasil diperbarui.');
+
+        // Jangan menyimpan password di state setelah berhasil.
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+
+      // ==========================================================
+      // 4. SIAPKAN PROFILE TERBARU
+      // ==========================================================
+
+      const baseProfile =
+        userProfile || profile || DEFAULT_PROFILE_FALLBACK;
+
+      const updated: UserAuthorProfile = {
+        ...baseProfile,
+        authorName: authorName.trim(),
+        penName: penName.trim() || authorName.trim(),
+        bio: bio.trim(),
+        avatarUrl,
+        dailyWordGoal: Number(dailyWordGoal) || 1000,
+      };
+
+      // ==========================================================
+      // 5. SIMPAN PROFILE
+      // ==========================================================
+
+      if (onSave) {
+        onSave(updated);
+      }
+
+      if (onSaveProfile) {
+        await onSaveProfile(updated);
+      }
+
+      // ==========================================================
+      // 6. NOTIFIKASI BERHASIL
+      // ==========================================================
+
+      setSuccessMsg(
+        isChangingPassword
+          ? 'Profil dan kata sandi berhasil diperbarui!'
+          : 'Profil penulis berhasil disimpan!'
+      );
+
+      setTimeout(() => {
+        setSuccessMsg(null);
+        onClose();
+      }, 900);
+    } catch (error) {
+      console.error('Gagal menyimpan pengaturan profil:', error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Gagal menyimpan perubahan profil.';
+
+      // Jika error berasal dari endpoint password,
+      // tampilkan sebagai pesan password.
+      if (isChangingPassword) {
+        setPasswordMsg(message);
+      } else {
+        setErrorMsg(message);
+      }
+    }
   };
 
   const handleExportJSON = () => {
     const dataStr = exportAllDataAsJSON();
-    const blob = new Blob([dataStr], { type: 'application/json' });
+    const blob = new Blob([dataStr], {
+      type: 'application/json',
+    });
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+
     a.href = url;
-    a.download = `NovelsCreator_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `NovelsCreator_Backup_${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
+
     a.click();
+
     URL.revokeObjectURL(url);
-    setSuccessMsg('Cadangan data berhasil diunduh dalam format JSON!');
+
+    setSuccessMsg(
+      'Cadangan data berhasil diunduh dalam format JSON!'
+    );
+
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportJSON = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         const ok = importAllDataFromJSON(reader.result);
+
         if (ok) {
-          setSuccessMsg('Data berhasil dipulihkan! Memuat ulang studio...');
-          if (onDataImported) onDataImported();
-          if (onDataRestored) onDataRestored();
+          setSuccessMsg(
+            'Data berhasil dipulihkan! Memuat ulang studio...'
+          );
+
+          if (onDataImported) {
+            onDataImported();
+          }
+
+          if (onDataRestored) {
+            onDataRestored();
+          }
+
           setTimeout(() => {
             window.location.reload();
           }, 1200);
         } else {
-          setErrorMsg('Format file JSON tidak valid untuk cadangan Novel\'s Creator.');
+          setErrorMsg(
+            'Format file JSON tidak valid untuk cadangan Novel\'s Creator.'
+          );
         }
       }
     };
+
     reader.readAsText(file);
   };
 
@@ -208,15 +352,18 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             <div className="p-2 bg-[#252538] rounded-xl border border-[#D4AF37]/30 text-[#D4AF37]">
               <User className="w-5 h-5" />
             </div>
+
             <div>
               <h3 className="font-editorial text-lg font-bold text-[#FAF7EE]">
                 Pengaturan Profil Penulis
               </h3>
+
               <p className="text-xs text-[#9E9EB2]">
                 Kelola identitas kepenulisan, target harian, & data studio
               </p>
             </div>
           </div>
+
           <button
             onClick={onClose}
             className="p-2 text-[#7E7E94] hover:text-[#FAF7EE] hover:bg-[#252538] rounded-xl transition-colors cursor-pointer"
@@ -237,6 +384,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           >
             Identitas Penulis
           </button>
+
           <button
             onClick={() => setActiveTab('writing')}
             className={`pb-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
@@ -247,6 +395,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           >
             Target & Preferensi
           </button>
+
           <button
             onClick={() => setActiveTab('backup')}
             className={`pb-3 px-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
@@ -266,6 +415,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             <span>{errorMsg}</span>
           </div>
         )}
+
         {successMsg && (
           <div className="mx-6 mt-4 p-3 bg-emerald-950/50 border border-emerald-800 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -290,11 +440,13 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-[#6E6E85] bg-gradient-to-b from-[#202030] to-[#141420]">
                       <Camera className="w-7 h-7 mb-1 text-[#D4AF37]/60" />
+
                       <span className="text-[9px] uppercase tracking-wider text-[#A0A0B5]">
                         Foto
                       </span>
                     </div>
                   )}
+
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -309,9 +461,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <h4 className="text-sm font-semibold text-[#FAF7EE] mb-1">
                     Foto Profil Penulis
                   </h4>
+
                   <p className="text-xs text-[#8E8EA4] mb-3">
                     Unggah foto lokal dari komputermu (JPG, PNG, WebP maks 5MB).
                   </p>
+
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                     <input
                       ref={fileInputRef}
@@ -320,6 +474,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       onChange={handleAvatarFileChange}
                       className="hidden"
                     />
+
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -328,6 +483,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       <Upload className="w-3.5 h-3.5 text-[#D4AF37]" />
                       <span>Unggah Foto</span>
                     </button>
+
                     {avatarUrl && (
                       <button
                         type="button"
@@ -346,8 +502,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
-                    Nama Penulis (Asli / Tampilan) <span className="text-[#D4AF37]">*</span>
+                    Nama Penulis (Asli / Tampilan){' '}
+                    <span className="text-[#D4AF37]">*</span>
                   </label>
+
                   <input
                     type="text"
                     value={authorName}
@@ -361,6 +519,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
                     Nama Pena (Nom de Plume)
                   </label>
+
                   <input
                     type="text"
                     value={penName}
@@ -376,6 +535,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
                   Bio / Tagline Penulis
                 </label>
+
                 <textarea
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
@@ -389,36 +549,70 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl space-y-3">
                 <div className="flex items-center gap-2 text-xs font-semibold text-[#D4AF37]">
                   <Lock className="w-4 h-4" />
+
                   <span>Ubah Kata Sandi (Opsional)</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Current Password */}
+                  <div>
+                    <label className="block text-[11px] text-[#A0A0B5] mb-1">
+                      Kata Sandi Saat Ini
+                    </label>
+
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className="w-full px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] rounded-lg text-xs text-[#E0E0E0] outline-none"
+                    />
+                  </div>
+
+                  {/* New Password */}
                   <div>
                     <label className="block text-[11px] text-[#A0A0B5] mb-1">
                       Kata Sandi Baru
                     </label>
+
                     <input
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="••••••••"
+                      autoComplete="new-password"
                       className="w-full px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] rounded-lg text-xs text-[#E0E0E0] outline-none"
                     />
                   </div>
+
+                  {/* Confirm Password */}
                   <div>
                     <label className="block text-[11px] text-[#A0A0B5] mb-1">
                       Konfirmasi Kata Sandi Baru
                     </label>
+
                     <input
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
+                      autoComplete="new-password"
                       className="w-full px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] rounded-lg text-xs text-[#E0E0E0] outline-none"
                     />
                   </div>
                 </div>
+
                 {passwordMsg && (
-                  <p className="text-xs text-emerald-400">{passwordMsg}</p>
+                  <p
+                    className={`text-xs ${
+                      passwordMsg.toLowerCase().includes('berhasil')
+                        ? 'text-emerald-400'
+                        : 'text-red-300'
+                    }`}
+                  >
+                    {passwordMsg}
+                  </p>
                 )}
               </div>
             </div>
@@ -431,13 +625,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl">
                 <div className="flex items-center gap-2 mb-2">
                   <Target className="w-4 h-4 text-[#D4AF37]" />
+
                   <h4 className="text-xs font-semibold text-[#FAF7EE]">
                     Target Kata Harian (Daily Word Goal)
                   </h4>
                 </div>
+
                 <p className="text-xs text-[#8E8EA4] mb-3">
                   Tentukan berapa jumlah kata yang ingin kamu capai setiap hari untuk memantau konsistensi menulismu.
                 </p>
+
                 <div className="flex items-center gap-3">
                   <input
                     type="number"
@@ -445,10 +642,15 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     max={20000}
                     step={100}
                     value={dailyWordGoal}
-                    onChange={(e) => setDailyWordGoal(Number(e.target.value))}
+                    onChange={(e) =>
+                      setDailyWordGoal(Number(e.target.value))
+                    }
                     className="w-36 px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-sm font-mono text-[#FAF7EE] outline-none"
                   />
-                  <span className="text-xs text-[#A0A0B5]">kata / hari</span>
+
+                  <span className="text-xs text-[#A0A0B5]">
+                    kata / hari
+                  </span>
                 </div>
               </div>
             </div>
@@ -460,17 +662,21 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl">
                 <h4 className="text-xs font-semibold text-[#FAF7EE] mb-1 flex items-center gap-2">
                   <Download className="w-4 h-4 text-[#D4AF37]" />
+
                   <span>Ekspor Cadangan Semua Data (JSON)</span>
                 </h4>
+
                 <p className="text-xs text-[#8E8EA4] mb-3">
                   Unduh seluruh novel, bab, database karakter wiki, relasi, dan catatan cepat dalam satu berkas file JSON yang aman.
                 </p>
+
                 <button
                   type="button"
                   onClick={handleExportJSON}
                   className="py-2 px-4 bg-[#242438] hover:bg-[#30304C] border border-[#3A3A56] rounded-xl text-xs font-medium text-[#FAF7EE] flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
+
                   <span>Unduh File Cadangan (.json)</span>
                 </button>
               </div>
@@ -478,11 +684,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl">
                 <h4 className="text-xs font-semibold text-[#FAF7EE] mb-1 flex items-center gap-2">
                   <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
-                  <span>Pulihkan Data dari Cadangan (Import JSON)</span>
+
+                  <span>
+                    Pulihkan Data dari Cadangan (Import JSON)
+                  </span>
                 </h4>
+
                 <p className="text-xs text-[#8E8EA4] mb-3">
                   Pulihkan kembali proyek ceritamu dari file cadangan yang pernah kamu ekspor sebelumnya.
                 </p>
+
                 <input
                   ref={backupImportRef}
                   type="file"
@@ -490,12 +701,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   onChange={handleImportJSON}
                   className="hidden"
                 />
+
                 <button
                   type="button"
                   onClick={() => backupImportRef.current?.click()}
                   className="py-2 px-4 bg-[#242438] hover:bg-[#30304C] border border-[#3A3A56] rounded-xl text-xs font-medium text-[#FAF7EE] flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <UploadCloud className="w-3.5 h-3.5 text-[#D4AF37]" />
+
                   <span>Pilih Berkas Cadangan (.json)</span>
                 </button>
               </div>
@@ -512,12 +725,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           >
             Batal
           </button>
+
           <button
             type="button"
             onClick={handleSaveProfile}
             className="py-2 px-5 bg-gradient-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
           >
             <Save className="w-4 h-4" />
+
             <span>Simpan Perubahan</span>
           </button>
         </div>

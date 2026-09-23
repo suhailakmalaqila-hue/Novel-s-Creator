@@ -16,8 +16,7 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-interface ApiRequestOptions
-  extends RequestInit {
+interface ApiRequestOptions extends RequestInit {
   auth?: boolean;
 }
 
@@ -33,19 +32,6 @@ export async function apiRequest<T>(
 
   const token = getToken();
 
-  /* Kode lama (belum fix)
-  const requestHeaders: HeadersInit = {
-    "Content-Type": "application/json",
-    ...headers,
-  };
-
-  if (auth && token) {
-    requestHeaders.Authorization =
-      `Bearer ${token}`;
-  }
-      */
-
-  // KODE BARU (SUDAH FIX)
   const requestHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...(headers as Record<string, string>),
@@ -54,7 +40,7 @@ export async function apiRequest<T>(
   if (auth && token) {
     requestHeaders["Authorization"] = `Bearer ${token}`;
   }
-    
+
   const response = await fetch(
     `${API_URL}${endpoint}`,
     {
@@ -72,11 +58,28 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    if (response.status === 401) {
+    /*
+     * Jangan langsung menghapus token untuk semua response 401.
+     *
+     * Endpoint seperti:
+     * PATCH /users/me/password
+     *
+     * dapat mengembalikan 401 karena currentPassword salah,
+     * bukan karena JWT/session sudah tidak valid.
+     *
+     * Kalau token langsung dihapus di sini, percobaan password
+     * berikutnya akan berubah menjadi "Authentication required".
+     */
+
+    const isPasswordChangeRequest =
+      endpoint === "/users/me/password";
+
+    if (
+      response.status === 401 &&
+      !isPasswordChangeRequest
+    ) {
       clearToken();
-      localStorage.removeItem(
-        "auth_user"
-      );
+      localStorage.removeItem("auth_user");
     }
 
     throw new Error(

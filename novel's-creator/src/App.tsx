@@ -11,6 +11,7 @@ import {
   Chapter,
   CharacterWiki,
   QuickNote,
+  UserAuthorProfile,
 } from "./types";
 
 import type { User } from "./types/auth";
@@ -433,7 +434,7 @@ function AdminDashboardView({
                   previous.map(
                     (item) =>
                       item.id ===
-                      editingUser.id
+                        editingUser.id
                         ? response.data
                         : item
                   )
@@ -444,7 +445,7 @@ function AdminDashboardView({
 
             setSuccessMessage(
               response.message ||
-                "User berhasil diperbarui."
+              "User berhasil diperbarui."
             );
           } else {
             const response =
@@ -484,7 +485,7 @@ function AdminDashboardView({
 
             setSuccessMessage(
               response.message ||
-                "User berhasil dibuat."
+              "User berhasil dibuat."
             );
           }
 
@@ -583,7 +584,7 @@ function AdminDashboardView({
 
           setSuccessMessage(
             response.message ||
-              "User berhasil dihapus."
+            "User berhasil dihapus."
           );
 
           /**
@@ -794,11 +795,10 @@ function AdminDashboardView({
               className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-[#303046] bg-[#171724] hover:bg-[#222234] hover:border-[#D4AF37]/40 disabled:opacity-50 disabled:cursor-not-allowed text-xs text-[#D8D8E8] transition-colors"
             >
               <RefreshCw
-                className={`w-4 h-4 ${
-                  loading
+                className={`w-4 h-4 ${loading
                     ? "animate-spin"
                     : ""
-                }`}
+                  }`}
               />
 
               <span>
@@ -1024,7 +1024,7 @@ function AdminDashboardView({
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-[#171724] border border-[#34344A] flex items-center justify-center shrink-0">
                                 {item.role ===
-                                "admin" ? (
+                                  "admin" ? (
                                   <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
                                 ) : (
                                   <UserRound className="w-4 h-4 text-[#8A8A9E]" />
@@ -1068,7 +1068,7 @@ function AdminDashboardView({
 
                           <td className="px-5 py-4">
                             {item.role ===
-                            "admin" ? (
+                              "admin" ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/25 text-[10px] font-semibold text-[#D4AF37]">
                                 <ShieldCheck className="w-3 h-3" />
                                 Admin
@@ -1377,8 +1377,8 @@ function AdminDashboardView({
                       event
                         .target
                         .value as
-                        | "admin"
-                        | "user"
+                      | "admin"
+                      | "user"
                     )
                   }
                   disabled={
@@ -1386,7 +1386,7 @@ function AdminDashboardView({
                     (
                       !!editingUser &&
                       editingUser.id ===
-                        currentUser.id
+                      currentUser.id
                     )
                   }
                   className="w-full px-3 py-2.5 rounded-xl bg-[#151522] border border-[#303046] focus:border-[#D4AF37]/60 outline-none text-xs sm:text-sm text-[#E0E0E0] disabled:opacity-50"
@@ -1402,7 +1402,7 @@ function AdminDashboardView({
 
                 {editingUser &&
                   editingUser.id ===
-                    currentUser.id && (
+                  currentUser.id && (
                     <p className="text-[10px] text-[#77778C] mt-1.5">
                       Role akun admin yang sedang
                       digunakan tidak dapat
@@ -1476,6 +1476,7 @@ function MainAppContent() {
     user,
     isAuthenticated,
     logout,
+    refreshUser,
   } = useAuth();
 
   const {
@@ -1505,6 +1506,10 @@ function MainAppContent() {
     addCharacter,
     editCharacter,
     removeCharacter,
+    addRelationship,
+    removeRelationship,
+    addCustomAttribute,
+    removeCustomAttribute,
   } = useCharacters();
 
   const [
@@ -1589,15 +1594,15 @@ function MainAppContent() {
             targetWordCount:
               Number(
                 b.targetWordCount ??
-                  b.target_word_count ??
-                  50000
+                b.target_word_count ??
+                50000
               ),
 
             currentWordCount:
               Number(
                 b.currentWordCount ??
-                  b.current_word_count ??
-                  0
+                b.current_word_count ??
+                0
               ),
 
             coverUrl:
@@ -1605,11 +1610,17 @@ function MainAppContent() {
               b.cover_url ??
               "",
 
-            genres:
-              b.genres ||
-              (b.genre
+            genres: Array.isArray(b.genres)
+              ? b.genres
+                .map((genre: any) =>
+                  typeof genre === "string"
+                    ? genre
+                    : genre?.name
+                )
+                .filter(Boolean)
+              : b.genre
                 ? [b.genre]
-                : []),
+                : [],
 
             chapters:
               b.chapters || [],
@@ -1620,14 +1631,24 @@ function MainAppContent() {
 
   const refreshLocalData =
     useCallback(() => {
-      setQuickNotes(
-        getQuickNotes()
-      );
-
       setCustomGenres(
         getCustomGenres()
       );
     }, []);
+
+  const refreshQuickNotes =
+    useCallback(() => {
+      if (!isAuthenticated) {
+        setQuickNotes([]);
+        return;
+      }
+
+      setQuickNotes(getQuickNotes());
+    }, [isAuthenticated]);
+
+  useEffect(() => {
+    refreshQuickNotes();
+  }, [refreshQuickNotes]);
 
   /**
    * Load character data.
@@ -1734,7 +1755,7 @@ function MainAppContent() {
             "tut-dummy"
           ) ||
           targetBookId ===
-            TUTORIAL_DUMMY_BOOK_ID
+          TUTORIAL_DUMMY_BOOK_ID
         )
       ) {
         setTargetBookId(null);
@@ -1747,7 +1768,7 @@ function MainAppContent() {
             "tut-dummy"
           ) ||
           targetChapterId ===
-            TUTORIAL_DUMMY_CHAPTER_1_ID
+          TUTORIAL_DUMMY_CHAPTER_1_ID
         )
       ) {
         setTargetChapterId(null);
@@ -1775,6 +1796,7 @@ function MainAppContent() {
       logout();
 
       clearAllChapters();
+      setQuickNotes([]);
 
       setTargetBookId(null);
       setTargetChapterId(null);
@@ -1807,7 +1829,7 @@ function MainAppContent() {
         (e.ctrlKey ||
           e.metaKey) &&
         e.key.toLowerCase() ===
-          "k"
+        "k"
       ) {
         e.preventDefault();
 
@@ -1820,7 +1842,7 @@ function MainAppContent() {
         (e.ctrlKey ||
           e.metaKey) &&
         e.key.toLowerCase() ===
-          "m"
+        "m"
       ) {
         e.preventDefault();
 
@@ -1844,18 +1866,101 @@ function MainAppContent() {
   }, []);
 
   /**
+   * Sinkronisasi genre Book melalui endpoint genre yang
+   * memang tersedia pada branch repair/fix.
+   *
+   * BookContext saat ini belum menerima field genres pada
+   * CreateBookInput / UpdateBookInput, sehingga relasi
+   * book_genres dikelola di App setelah book tersimpan.
+   */
+  const syncBookGenres = useCallback(
+    async (
+      bookId: string,
+      genreNames: string[],
+      currentGenres: any[] = []
+    ) => {
+      const normalizedNames = Array.from(
+        new Set(
+          (genreNames || [])
+            .map((name) => String(name).trim())
+            .filter(Boolean)
+        )
+      );
+
+      const genreResponse =
+        await apiRequest<{
+          success: boolean;
+          data: Array<{ id: string; name: string }>;
+        }>("/genres");
+
+      const genreMap = new Map<string, string>();
+
+      for (const genre of genreResponse.data || []) {
+        genreMap.set(genre.name.trim().toLowerCase(), genre.id);
+      }
+
+      const desiredGenreIds: string[] = [];
+
+      for (const name of normalizedNames) {
+        const key = name.toLowerCase();
+        let genreId = genreMap.get(key);
+
+        if (!genreId) {
+          const created =
+            await apiRequest<{
+              success: boolean;
+              data: { id: string; name: string };
+            }>("/genres", {
+              method: "POST",
+              body: JSON.stringify({ name }),
+            });
+
+          genreId = created.data.id;
+          genreMap.set(key, genreId);
+        }
+
+        desiredGenreIds.push(genreId);
+      }
+
+      const currentGenreIds = (currentGenres || [])
+        .map((genre) => genre?.id)
+        .filter(Boolean) as string[];
+
+      for (const genreId of currentGenreIds) {
+        if (!desiredGenreIds.includes(genreId)) {
+          await apiRequest(
+            `/genres/books/${encodeURIComponent(bookId)}/${encodeURIComponent(genreId)}`,
+            { method: "DELETE" }
+          );
+        }
+      }
+
+      for (const genreId of desiredGenreIds) {
+        if (!currentGenreIds.includes(genreId)) {
+          await apiRequest(
+            `/genres/books/${encodeURIComponent(bookId)}/${encodeURIComponent(genreId)}`,
+            {
+              method: "POST",
+              body: JSON.stringify({}),
+            }
+          );
+        }
+      }
+    },
+    []
+  );
+
+  /**
    * Save Book.
    */
   const handleSaveBook =
     useCallback(
       async (book: Book) => {
-        const targetWords =
-          Number(
-            book.targetWordCount ??
-              (book as any)
-                .target_word_count ??
-              50000
-          );
+        const targetWords = Number(
+          book.targetWordCount ??
+          (book as any).target_word_count ??
+          50000
+        );
 
         const coverUrl =
           (book as any).coverUrl ??
@@ -1863,42 +1968,51 @@ function MainAppContent() {
           "";
 
         if (!book.id) {
-          await addBook({
+          const created = await addBook({
             title: book.title,
-            synopsis:
-              book.synopsis,
+            synopsis: book.synopsis,
             coverUrl,
-            targetWordCount:
-              targetWords,
-            status:
-              book.status ||
-              "draft",
+            targetWordCount: targetWords,
+            status: book.status || "draft",
           });
+
+          await syncBookGenres(
+            created.id,
+            book.genres ?? [],
+            []
+          );
 
           await refreshBooks();
           return;
         }
 
-        await editBook(
+        const existingBook =
+          contextBooks.find(
+            (item) => item.id === book.id
+          );
+
+        await editBook(book.id, {
+          title: book.title,
+          synopsis: book.synopsis,
+          coverUrl,
+          targetWordCount: targetWords,
+          status: book.status,
+        });
+
+        await syncBookGenres(
           book.id,
-          {
-            title: book.title,
-            synopsis:
-              book.synopsis,
-            coverUrl,
-            targetWordCount:
-              targetWords,
-            status:
-              book.status,
-          }
+          book.genres ?? [],
+          existingBook?.genres ?? []
         );
 
         await refreshBooks();
       },
       [
-        editBook,
         addBook,
+        editBook,
+        contextBooks,
         refreshBooks,
+        syncBookGenres,
       ]
     );
 
@@ -2067,7 +2181,7 @@ function MainAppContent() {
 
         const bookChapters =
           chaptersByBook[
-            targetBookId
+          targetBookId
           ] ?? [];
 
         const chapter =
@@ -2125,63 +2239,97 @@ function MainAppContent() {
    */
   const handleSaveCharacter =
     useCallback(
-      async (
-        character: CharacterWiki
-      ) => {
+      async (character: CharacterWiki) => {
         try {
           const payload = {
-            fullName:
-              character.fullName,
-
-            alias:
-              character.alias,
-
-            age:
-              character.age,
-
-            gender:
-              character.gender,
-
-            roleTag:
-              character.roleTag,
-
-            status:
-              character.status,
-
-            avatarUrl:
-              character.avatarUrl,
-
-            physicalAppearance:
-              character.physicalAppearance,
-
-            personalityTraits:
-              character.personalityTraits,
-
-            backstory:
-              character.backstory,
-
-            motivation:
-              character.motivation,
-
-            worldGoal:
-              character.worldGoal,
-
-            bookIds:
-              character.bookIds,
+            fullName: character.fullName,
+            alias: character.alias,
+            age: character.age,
+            gender: character.gender,
+            roleTag: character.roleTag,
+            status: character.status,
+            avatarUrl: character.avatarUrl,
+            physicalAppearance: character.physicalAppearance,
+            personalityTraits: character.personalityTraits,
+            backstory: character.backstory,
+            motivation: character.motivation,
+            worldGoal: character.worldGoal,
+            bookIds: character.bookIds,
           };
 
-          if (
-            character.id
-          ) {
-            await editCharacter(
-              character.id,
-              payload
+          const isPersistedCharacter =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+              character.id
             );
-          } else {
-            await addCharacter(
-              payload
+
+          const previousCharacter =
+            isPersistedCharacter
+              ? characters.find(
+                (item) => item.id === character.id
+              )
+              : undefined;
+
+          const savedCharacter =
+            isPersistedCharacter
+              ? await editCharacter(
+                character.id,
+                payload
+              )
+              : await addCharacter(payload);
+
+          // Backend branch repair/fix memiliki endpoint terpisah
+          // untuk custom attributes dan relationships.
+          // Sinkronkan nested data setelah karakter utama tersimpan.
+          if (previousCharacter) {
+            for (const attr of previousCharacter.customAttributes || []) {
+              if (attr.id) {
+                await removeCustomAttribute(
+                  savedCharacter.id,
+                  attr.id
+                );
+              }
+            }
+
+            for (const rel of previousCharacter.relationships || []) {
+              if (rel.id) {
+                await removeRelationship(
+                  savedCharacter.id,
+                  rel.id
+                );
+              }
+            }
+          }
+
+          for (const attr of character.customAttributes || []) {
+            const key = attr.key.trim();
+            const value = attr.value.trim();
+
+            if (!key && !value) {
+              continue;
+            }
+
+            await addCustomAttribute(
+              savedCharacter.id,
+              { key, value }
             );
           }
+
+          for (const rel of character.relationships || []) {
+            if (!rel.targetCharacterId || rel.targetCharacterId === savedCharacter.id) {
+              continue;
+            }
+
+            await addRelationship(
+              savedCharacter.id,
+              {
+                targetCharacterId: rel.targetCharacterId,
+                relationType: rel.relationType.trim(),
+                description: rel.description?.trim() || "",
+              }
+            );
+          }
+
+          await refreshCharacters();
         } catch (error) {
           console.error(
             "Gagal menyimpan character:",
@@ -2192,8 +2340,14 @@ function MainAppContent() {
         }
       },
       [
+        characters,
         editCharacter,
         addCharacter,
+        removeCustomAttribute,
+        removeRelationship,
+        addCustomAttribute,
+        addRelationship,
+        refreshCharacters,
       ]
     );
 
@@ -2225,33 +2379,19 @@ function MainAppContent() {
    * Save Quick Note.
    */
   const handleSaveQuickNote =
-    useCallback(
-      (note: QuickNote) => {
-        saveQuickNote(note);
-
-        setQuickNotes(
-          getQuickNotes()
-        );
-      },
-      []
-    );
+    useCallback((note: QuickNote) => {
+      saveQuickNote(note);
+      setQuickNotes(getQuickNotes());
+    }, []);
 
   /**
    * Delete Quick Note.
    */
   const handleDeleteQuickNote =
-    useCallback(
-      (noteId: string) => {
-        deleteQuickNote(
-          noteId
-        );
-
-        setQuickNotes(
-          getQuickNotes()
-        );
-      },
-      []
-    );
+    useCallback((noteId: string) => {
+      deleteQuickNote(noteId);
+      setQuickNotes(getQuickNotes());
+    }, []);
 
   /**
    * Add custom genre.
@@ -2317,30 +2457,54 @@ function MainAppContent() {
       ]
     );
 
+  const userProfileForUI: UserAuthorProfile | null =
+    user
+      ? {
+        id: user.id,
+        username: user.email,
+        email: user.email,
+        authorName: user.author_name ?? "",
+        penName: user.pen_name ?? "",
+        bio: user.bio ?? "",
+        avatarUrl: user.avatar_url ?? "",
+        dailyWordGoal: Number(user.daily_word_goal ?? 0),
+        todayWordCount: Number(user.today_word_count ?? 0),
+        lastActiveDate:
+          user.last_active_date ??
+          new Date().toISOString().split("T")[0],
+        theme: "dark",
+        soundEffects: user.sound_effects ?? true,
+        preferredGenre: user.preferred_genre ?? undefined,
+        hasCompletedTutorial: Boolean(user.tutorial_completed),
+        isAuthenticated: isAuthenticated,
+        createdAt: user.created_at ?? new Date().toISOString(),
+      }
+      : null;
+
   const isDummyActive =
     isTutorialOpen;
 
   const displayBooks =
     isDummyActive &&
-    books.length === 0
+      books.length === 0
       ? TUTORIAL_DUMMY_BOOKS
       : books;
 
   const displayChapters =
     isDummyActive &&
-    chapters.length === 0
+      chapters.length === 0
       ? TUTORIAL_DUMMY_CHAPTERS
       : chapters;
 
   const displayCharacters =
     isDummyActive &&
-    characters.length === 0
+      characters.length === 0
       ? TUTORIAL_DUMMY_CHARACTERS
       : characters;
 
   const displayQuickNotes =
     isDummyActive &&
-    quickNotes.length === 0
+      quickNotes.length === 0
       ? TUTORIAL_DUMMY_QUICK_NOTES
       : quickNotes;
 
@@ -2372,7 +2536,7 @@ function MainAppContent() {
       if (
         isDummyActive &&
         displayBooks.length >
-          0
+        0
       ) {
         return displayBooks[0]
           .id;
@@ -2410,15 +2574,15 @@ function MainAppContent() {
       const availableChapters =
         isDummyBook
           ? displayChapters.filter(
-              (chapter) =>
-                chapter.bookId ===
-                activeEditorBookId
-            )
+            (chapter) =>
+              chapter.bookId ===
+              activeEditorBookId
+          )
           : (
-              chaptersByBook[
-                activeEditorBookId
-              ] ?? []
-            );
+            chaptersByBook[
+            activeEditorBookId
+            ] ?? []
+          );
 
       if (
         targetChapterId &&
@@ -2491,15 +2655,15 @@ function MainAppContent() {
     const availableChapters =
       isDummyBook
         ? displayChapters.filter(
-            (chapter) =>
-              chapter.bookId ===
-              targetBookId
-          )
+          (chapter) =>
+            chapter.bookId ===
+            targetBookId
+        )
         : (
-            chaptersByBook[
-              targetBookId
-            ] ?? []
-          );
+          chaptersByBook[
+          targetBookId
+          ] ?? []
+        );
 
     const chapterExists =
       availableChapters.some(
@@ -2622,7 +2786,7 @@ function MainAppContent() {
           currentView
         }
         userProfile={
-          user as any
+          userProfileForUI
         }
         notesCount={
           displayQuickNotes.length
@@ -2658,124 +2822,124 @@ function MainAppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         {currentView ===
           "workspace" && (
-          <WorkspaceView
-            books={
-              displayBooks
-            }
-            chapters={
-              displayChapters
-            }
-            chaptersByBook={
-              chaptersByBook
-            }
-            loadingByBook={
-              loadingByBook
-            }
-            activeBookId={
-              targetBookId
-            }
-            customGenres={
-              customGenres
-            }
-            userProfile={
-              user as any
-            }
-            onSaveBook={
-              handleSaveBook
-            }
-            onDeleteBook={
-              handleDeleteBook
-            }
-            onSaveChapter={
-              handleSaveChapter
-            }
-            onDeleteChapter={
-              handleDeleteChapter
-            }
-            onAddCustomGenre={
-              handleAddCustomGenre
-            }
-            onOpenEditor={
-              handleOpenEditor
-            }
-            onSelectBook={(
-              bookId
-            ) => {
-              setTargetBookId(
+            <WorkspaceView
+              books={
+                displayBooks
+              }
+              chapters={
+                displayChapters
+              }
+              chaptersByBook={
+                chaptersByBook
+              }
+              loadingByBook={
+                loadingByBook
+              }
+              activeBookId={
+                targetBookId
+              }
+              customGenres={
+                customGenres
+              }
+              userProfile={
+                userProfileForUI
+              }
+              onSaveBook={
+                handleSaveBook
+              }
+              onDeleteBook={
+                handleDeleteBook
+              }
+              onSaveChapter={
+                handleSaveChapter
+              }
+              onDeleteChapter={
+                handleDeleteChapter
+              }
+              onAddCustomGenre={
+                handleAddCustomGenre
+              }
+              onOpenEditor={
+                handleOpenEditor
+              }
+              onSelectBook={(
                 bookId
-              );
+              ) => {
+                setTargetBookId(
+                  bookId
+                );
 
-              setTargetChapterId(
-                null
-              );
-            }}
-            onOpenCharactersWiki={() =>
-              setCurrentView(
-                "characters"
-              )
-            }
-          />
-        )}
+                setTargetChapterId(
+                  null
+                );
+              }}
+              onOpenCharactersWiki={() =>
+                setCurrentView(
+                  "characters"
+                )
+              }
+            />
+          )}
 
         {currentView ===
           "characters" && (
-          <CharacterWikiView
-            characters={
-              displayCharacters
-            }
-            books={
-              displayBooks
-            }
-            onSaveCharacter={
-              handleSaveCharacter
-            }
-            onDeleteCharacter={
-              handleDeleteCharacter
-            }
-          />
-        )}
+            <CharacterWikiView
+              characters={
+                displayCharacters
+              }
+              books={
+                displayBooks
+              }
+              onSaveCharacter={
+                handleSaveCharacter
+              }
+              onDeleteCharacter={
+                handleDeleteCharacter
+              }
+            />
+          )}
 
         {currentView ===
           "editor" && (
-          <NovelEditorView
-            books={
-              displayBooks
-            }
-            chapters={
-              displayChapters
-            }
-            chaptersByBook={
-              chaptersByBook
-            }
-            initialBookId={
-              activeEditorBookId
-            }
-            initialChapterId={
-              activeEditorChapterId
-            }
-            userProfile={
-              user as any
-            }
-            onSaveChapter={
-              handleSaveChapter
-            }
-            onSelectBook={(
-              bookId
-            ) => {
-              setTargetBookId(
+            <NovelEditorView
+              books={
+                displayBooks
+              }
+              chapters={
+                displayChapters
+              }
+              chaptersByBook={
+                chaptersByBook
+              }
+              initialBookId={
+                activeEditorBookId
+              }
+              initialChapterId={
+                activeEditorChapterId
+              }
+              userProfile={
+                userProfileForUI
+              }
+              onSaveChapter={
+                handleSaveChapter
+              }
+              onSelectBook={(
                 bookId
-              );
+              ) => {
+                setTargetBookId(
+                  bookId
+                );
 
-              setTargetChapterId(
-                null
-              );
+                setTargetChapterId(
+                  null
+                );
 
-              setCurrentView(
-                "workspace"
-              );
-            }}
-          />
-        )}
+                setCurrentView(
+                  "workspace"
+                );
+              }}
+            />
+          )}
       </main>
 
       <footer className="h-10 bg-[#1E1E2E] border-t border-[#2A2A3C] flex items-center justify-between px-4 sm:px-8 text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 shrink-0">
@@ -2909,15 +3073,15 @@ function MainAppContent() {
           const availableChapters =
             isDummyBook
               ? displayChapters.filter(
-                  (chapter) =>
-                    chapter.bookId ===
-                    bookId
-                )
+                (chapter) =>
+                  chapter.bookId ===
+                  bookId
+              )
               : (
-                  chaptersByBook[
-                    bookId
-                  ] ?? []
-                );
+                chaptersByBook[
+                bookId
+                ] ?? []
+              );
 
           const chapterExists =
             availableChapters.some(
@@ -2972,14 +3136,34 @@ function MainAppContent() {
           isProfileSettingsOpen
         }
         userProfile={
-          user as any
+          userProfileForUI
         }
         onClose={() =>
           setIsProfileSettingsOpen(
             false
           )
         }
-        onSaveProfile={() => {}}
+        onSaveProfile={async (updatedProfile) => {
+          await apiRequest<{
+            success: boolean;
+            message?: string;
+            data: User;
+          }>("/users/me", {
+            method: "PATCH",
+            body: JSON.stringify({
+              authorName: updatedProfile.authorName,
+              penName: updatedProfile.penName,
+              bio: updatedProfile.bio,
+              avatarUrl: updatedProfile.avatarUrl,
+              dailyWordGoal: updatedProfile.dailyWordGoal,
+              theme: updatedProfile.theme,
+              soundEffects: updatedProfile.soundEffects,
+              preferredGenre: updatedProfile.preferredGenre,
+            }),
+          });
+
+          await refreshUser();
+        }}
         onDataRestored={
           refreshBooks
         }
