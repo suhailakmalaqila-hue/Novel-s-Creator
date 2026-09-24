@@ -15,6 +15,7 @@ import relationshipRoutes from "./routes/relationship.routes";
 import customAttributeRoutes from "./routes/custom-attribute.routes";
 import mentionRoutes from "./routes/mention.routes";
 import quickNoteRoutes from "./routes/quick-note.routes";
+import backupRoutes from "./routes/backup.routes";
 
 dotenv.config();
 
@@ -64,6 +65,7 @@ app.use("/api/characters", characterRoutes);
 app.use("/api/characters", relationshipRoutes);
 app.use("/api/characters", customAttributeRoutes);
 app.use("/api", mentionRoutes);
+app.use("/api/backup", backupRoutes);
 
 /**
  * D6 - Quick Notes
