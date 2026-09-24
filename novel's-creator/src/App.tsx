@@ -165,17 +165,23 @@ function AdminDashboardView({
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
+  const [successMessage, setSuccessMessage] =
+    useState<string | null>(null);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [isModalOpen, setIsModalOpen] =
+    useState(false);
+  const [editingUser, setEditingUser] =
+    useState<AdminUser | null>(null);
 
-  const [form, setForm] = useState<AdminUserForm>(
-    EMPTY_ADMIN_USER_FORM
-  );
+  const [form, setForm] =
+    useState<AdminUserForm>(
+      EMPTY_ADMIN_USER_FORM
+    );
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] =
+    useState("");
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -227,8 +233,10 @@ function AdminDashboardView({
       setForm({
         email: targetUser.email ?? "",
         password: "",
-        authorName: targetUser.author_name ?? "",
-        penName: targetUser.pen_name ?? "",
+        authorName:
+          targetUser.author_name ?? "",
+        penName:
+          targetUser.pen_name ?? "",
         role: targetUser.role,
       });
 
@@ -270,11 +278,15 @@ function AdminDashboardView({
       setSuccessMessage(null);
 
       const email = form.email.trim();
-      const authorName = form.authorName.trim();
-      const penName = form.penName.trim();
+      const authorName =
+        form.authorName.trim();
+      const penName =
+        form.penName.trim();
 
       if (!email) {
-        setErrorMessage("Email wajib diisi.");
+        setErrorMessage(
+          "Email wajib diisi."
+        );
         return;
       }
 
@@ -321,14 +333,17 @@ function AdminDashboardView({
               `/admin/users/${editingUser.id}`,
               {
                 method: "PATCH",
-                body: JSON.stringify(payload),
+                body: JSON.stringify(
+                  payload
+                ),
               }
             );
 
           if (response.data) {
             setUsers((previous) =>
               previous.map((item) =>
-                item.id === editingUser.id
+                item.id ===
+                editingUser.id
                   ? response.data
                   : item
               )
@@ -339,7 +354,7 @@ function AdminDashboardView({
 
           setSuccessMessage(
             response.message ||
-            "User berhasil diperbarui."
+              "User berhasil diperbarui."
           );
         } else {
           const response =
@@ -377,7 +392,7 @@ function AdminDashboardView({
 
           setSuccessMessage(
             response.message ||
-            "User berhasil dibuat."
+              "User berhasil dibuat."
           );
         }
 
@@ -456,7 +471,7 @@ function AdminDashboardView({
 
         setSuccessMessage(
           response.message ||
-          "User berhasil dihapus."
+            "User berhasil dihapus."
         );
 
         await loadUsers();
@@ -493,7 +508,8 @@ function AdminDashboardView({
 
     return users.filter((item) => {
       const email =
-        item.email?.toLowerCase() ?? "";
+        item.email?.toLowerCase() ??
+        "";
 
       const authorName =
         item.author_name?.toLowerCase() ??
@@ -1385,15 +1401,15 @@ function MainAppContent() {
             targetWordCount:
               Number(
                 b.targetWordCount ??
-                b.target_word_count ??
-                50000
+                  b.target_word_count ??
+                  50000
               ),
 
             currentWordCount:
               Number(
                 b.currentWordCount ??
-                b.current_word_count ??
-                0
+                  b.current_word_count ??
+                  0
               ),
 
             coverUrl:
@@ -1401,10 +1417,13 @@ function MainAppContent() {
               b.cover_url ??
               "",
 
-            genres: Array.isArray(b.genres)
+            genres: Array.isArray(
+              b.genres
+            )
               ? b.genres
                   .map((genre: any) =>
-                    typeof genre === "string"
+                    typeof genre ===
+                    "string"
                       ? genre
                       : genre?.name
                   )
@@ -2610,6 +2629,71 @@ function MainAppContent() {
   ]);
 
   /**
+   * =======================================================
+   * REFRESH SEMUA DATA SETELAH RESTORE / IMPORT BACKUP
+   * =======================================================
+   *
+   * Backup hanya berisi data project.
+   * Setelah import berhasil, state React harus mengambil
+   * ulang data dari backend supaya UI langsung sinkron.
+   *
+   * Books:
+   *   refreshBooks()
+   *
+   * Chapters:
+   *   akan mengikuti lifecycle existing yang memuat
+   *   chapter ketika daftar books berubah.
+   *
+   * Characters:
+   *   refreshCharacters()
+   *
+   * Quick Notes:
+   *   refreshQuickNotes()
+   *
+   * User profile:
+   *   TIDAK diubah karena backup project tidak
+   *   menyimpan credential / akun user.
+   */
+  const handleDataRestored =
+    useCallback(async () => {
+      /*
+       * Jalankan refresh utama secara berurutan.
+       *
+       * refreshBooks() lebih dulu agar daftar book
+       * hasil import masuk ke BookContext.
+       */
+      await refreshBooks();
+
+      /*
+       * Character dan Quick Notes memiliki lifecycle
+       * terpisah dari BookContext sehingga perlu
+       * di-refresh secara eksplisit.
+       */
+      await Promise.all([
+        refreshCharacters(),
+        refreshQuickNotes(),
+      ]);
+
+      /*
+       * Tidak perlu memanggil refreshUser().
+       *
+       * Backup/restore tidak memulihkan data akun,
+       * password, atau credential user.
+       */
+
+      /*
+       * Jika sedang berada di editor dan data hasil
+       * restore mengubah daftar book/chapter, state
+       * target akan dibersihkan oleh useEffect yang
+       * sudah ada di bawah.
+       */
+    }, [
+      refreshBooks,
+      refreshCharacters,
+      refreshQuickNotes,
+    ]);
+
+  /**
    * SPLASH
    */
   if (
@@ -2993,7 +3077,7 @@ function MainAppContent() {
           await refreshUser();
         }}
         onDataRestored={
-          refreshBooks
+          handleDataRestored
         }
       />
     </div>

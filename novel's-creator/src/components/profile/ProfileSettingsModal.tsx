@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { UserAuthorProfile } from '../../types';
-import { exportAllDataAsJSON, importAllDataFromJSON } from '../../lib/storage';
 import { apiRequest } from '../../services/api';
 import {
   X,
@@ -24,8 +23,8 @@ interface ProfileSettingsModalProps {
   onClose: () => void;
   onSave?: (updatedProfile: UserAuthorProfile) => void;
   onSaveProfile?: (updatedProfile: UserAuthorProfile) => void;
-  onDataImported?: () => void;
-  onDataRestored?: () => void;
+  onDataImported?: () => void | Promise<void>;
+  onDataRestored?: () => void | Promise<void>;
 }
 
 const DEFAULT_PROFILE_FALLBACK: UserAuthorProfile = {
@@ -44,7 +43,15 @@ const DEFAULT_PROFILE_FALLBACK: UserAuthorProfile = {
   createdAt: new Date().toISOString(),
 };
 
-export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
+interface BackupResponse {
+  success: boolean;
+  message?: string;
+  data?: unknown;
+}
+
+export const ProfileSettingsModal: React.FC<
+  ProfileSettingsModalProps
+> = ({
   isOpen,
   profile,
   userProfile,
@@ -54,61 +61,87 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   onDataImported,
   onDataRestored,
 }) => {
-  const activeProfile = userProfile || profile || DEFAULT_PROFILE_FALLBACK;
+  const activeProfile =
+    userProfile || profile || DEFAULT_PROFILE_FALLBACK;
 
-  const [authorName, setAuthorName] = useState(activeProfile?.authorName || '');
-  const [penName, setPenName] = useState(activeProfile?.penName || '');
+  const [authorName, setAuthorName] = useState(
+    activeProfile?.authorName || ''
+  );
+
+  const [penName, setPenName] = useState(
+    activeProfile?.penName || ''
+  );
+
   const [bio, setBio] = useState(activeProfile?.bio || '');
-  const [avatarUrl, setAvatarUrl] = useState(activeProfile?.avatarUrl || '');
+
+  const [avatarUrl, setAvatarUrl] = useState(
+    activeProfile?.avatarUrl || ''
+  );
+
   const [dailyWordGoal, setDailyWordGoal] = useState(
     activeProfile?.dailyWordGoal || 1000
   );
+
+  // Password change states
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMsg, setPasswordMsg] = useState<string | null>(
+    null
+  );
+
+  const [activeTab, setActiveTab] = useState<
+    'profile' | 'writing' | 'backup'
+  >('profile');
+
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupImportRef = useRef<HTMLInputElement>(null);
 
   // Sync state when incoming profile or modal visibility changes
   React.useEffect(() => {
     const current = userProfile || profile;
 
     if (current) {
-      setAuthorName(current?.authorName || '');
-      setPenName(current?.penName || '');
-      setBio(current?.bio || '');
-      setAvatarUrl(current?.avatarUrl || '');
-      setDailyWordGoal(current?.dailyWordGoal || 1000);
+      setAuthorName(current.authorName || '');
+      setPenName(current.penName || '');
+      setBio(current.bio || '');
+      setAvatarUrl(current.avatarUrl || '');
+      setDailyWordGoal(current.dailyWordGoal || 1000);
     }
 
-    // Reset password fields setiap kali modal dibuka / profile berubah.
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setPasswordMsg(null);
     setSuccessMsg(null);
     setErrorMsg(null);
+    setIsExporting(false);
+    setIsImporting(false);
   }, [userProfile, profile, isOpen]);
-
-  // Password change states
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
-
-  const [activeTab, setActiveTab] = useState<'profile' | 'writing' | 'backup'>(
-    'profile'
-  );
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const backupImportRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
-  // Handle local avatar photo upload using FileReader Base64
-  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ============================================================
+  // AVATAR
+  // ============================================================
+
+  const handleAvatarFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
+
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setErrorMsg('Format file harus berupa gambar (JPG, PNG, WebP).');
+      setErrorMsg(
+        'Format file harus berupa gambar (JPG, PNG, WebP).'
+      );
       return;
     }
 
@@ -137,6 +170,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
+  // ============================================================
+  // SAVE PROFILE
+  // ============================================================
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -144,18 +181,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     setPasswordMsg(null);
     setSuccessMsg(null);
 
-    // ============================================================
-    // 1. VALIDASI PROFIL
-    // ============================================================
-
     if (!authorName.trim()) {
       setErrorMsg('Nama Penulis tidak boleh kosong.');
       return;
     }
-
-    // ============================================================
-    // 2. VALIDASI PASSWORD
-    // ============================================================
 
     const isChangingPassword =
       Boolean(currentPassword) ||
@@ -174,12 +203,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       }
 
       if (newPassword.length < 6) {
-        setPasswordMsg('Kata sandi baru minimal 6 karakter.');
+        setPasswordMsg(
+          'Kata sandi baru minimal 6 karakter.'
+        );
         return;
       }
 
       if (newPassword !== confirmPassword) {
-        setPasswordMsg('Konfirmasi kata sandi baru tidak cocok.');
+        setPasswordMsg(
+          'Konfirmasi kata sandi baru tidak cocok.'
+        );
         return;
       }
 
@@ -193,7 +226,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
     try {
       // ==========================================================
-      // 3. UPDATE PASSWORD KE BACKEND
+      // UPDATE PASSWORD
       // ==========================================================
 
       if (isChangingPassword) {
@@ -208,16 +241,17 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           }),
         });
 
-        setPasswordMsg('Kata sandi berhasil diperbarui.');
+        setPasswordMsg(
+          'Kata sandi berhasil diperbarui.'
+        );
 
-        // Jangan menyimpan password di state setelah berhasil.
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
       }
 
       // ==========================================================
-      // 4. SIAPKAN PROFILE TERBARU
+      // PROFILE TERBARU
       // ==========================================================
 
       const baseProfile =
@@ -226,14 +260,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const updated: UserAuthorProfile = {
         ...baseProfile,
         authorName: authorName.trim(),
-        penName: penName.trim() || authorName.trim(),
+        penName:
+          penName.trim() || authorName.trim(),
         bio: bio.trim(),
         avatarUrl,
-        dailyWordGoal: Number(dailyWordGoal) || 1000,
+        dailyWordGoal:
+          Number(dailyWordGoal) || 1000,
       };
 
       // ==========================================================
-      // 5. SIMPAN PROFILE
+      // SIMPAN PROFILE
       // ==========================================================
 
       if (onSave) {
@@ -243,10 +279,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       if (onSaveProfile) {
         await onSaveProfile(updated);
       }
-
-      // ==========================================================
-      // 6. NOTIFIKASI BERHASIL
-      // ==========================================================
 
       setSuccessMsg(
         isChangingPassword
@@ -259,15 +291,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         onClose();
       }, 900);
     } catch (error) {
-      console.error('Gagal menyimpan pengaturan profil:', error);
+      console.error(
+        'Gagal menyimpan pengaturan profil:',
+        error
+      );
 
       const message =
         error instanceof Error
           ? error.message
           : 'Gagal menyimpan perubahan profil.';
 
-      // Jika error berasal dari endpoint password,
-      // tampilkan sebagai pesan password.
       if (isChangingPassword) {
         setPasswordMsg(message);
       } else {
@@ -276,68 +309,204 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  const handleExportJSON = () => {
-    const dataStr = exportAllDataAsJSON();
-    const blob = new Blob([dataStr], {
-      type: 'application/json',
-    });
+  // ============================================================
+  // BACKUP - EXPORT DARI BACKEND
+  // ============================================================
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+  const handleExportJSON = async () => {
+    if (isExporting || isImporting) return;
 
-    a.href = url;
-    a.download = `NovelsCreator_Backup_${new Date()
-      .toISOString()
-      .slice(0, 10)}.json`;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsExporting(true);
 
-    a.click();
+    try {
+      const response =
+        await apiRequest<BackupResponse>(
+          '/backup/export'
+        );
 
-    URL.revokeObjectURL(url);
+      if (!response?.success || !response.data) {
+        throw new Error(
+          response?.message ||
+            'Data backup tidak tersedia.'
+        );
+      }
 
-    setSuccessMsg(
-      'Cadangan data berhasil diunduh dalam format JSON!'
-    );
+      const blob = new Blob(
+        [JSON.stringify(response.data, null, 2)],
+        {
+          type: 'application/json;charset=utf-8',
+        }
+      );
 
-    setTimeout(() => setSuccessMsg(null), 3000);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+
+      anchor.href = url;
+      anchor.download = `NovelsCreator_Backup_${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`;
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      URL.revokeObjectURL(url);
+
+      setSuccessMsg(
+        'Cadangan data berhasil diunduh dalam format JSON!'
+      );
+
+      setTimeout(() => {
+        setSuccessMsg(null);
+      }, 3000);
+    } catch (error) {
+      console.error(
+        'Gagal mengekspor backup:',
+        error
+      );
+
+      setErrorMsg(
+        error instanceof Error
+          ? error.message
+          : 'Gagal mengekspor data backup.'
+      );
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const handleImportJSON = (
+  // ============================================================
+  // BACKUP - IMPORT KE BACKEND
+  // ============================================================
+
+  const handleImportJSON = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
+
     if (!file) return;
 
-    const reader = new FileReader();
+    // Reset input supaya file yang sama tetap bisa dipilih lagi
+    e.target.value = '';
 
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        const ok = importAllDataFromJSON(reader.result);
+    if (isExporting || isImporting) return;
 
-        if (ok) {
-          setSuccessMsg(
-            'Data berhasil dipulihkan! Memuat ulang studio...'
-          );
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsImporting(true);
 
-          if (onDataImported) {
-            onDataImported();
-          }
-
-          if (onDataRestored) {
-            onDataRestored();
-          }
-
-          setTimeout(() => {
-            window.location.reload();
-          }, 1200);
-        } else {
-          setErrorMsg(
-            'Format file JSON tidak valid untuk cadangan Novel\'s Creator.'
-          );
-        }
+    try {
+      if (
+        file.type !== 'application/json' &&
+        !file.name.toLowerCase().endsWith('.json')
+      ) {
+        throw new Error(
+          'File harus berupa JSON (.json).'
+        );
       }
-    };
 
-    reader.readAsText(file);
+      const fileText = await file.text();
+
+      if (!fileText.trim()) {
+        throw new Error(
+          'File JSON kosong.'
+        );
+      }
+
+      let backupData: unknown;
+
+      try {
+        backupData = JSON.parse(fileText);
+      } catch {
+        throw new Error(
+          'Isi file bukan JSON yang valid.'
+        );
+      }
+
+      // Validasi ringan di frontend.
+      // Validasi utama tetap dilakukan oleh backend.
+      if (
+        !backupData ||
+        typeof backupData !== 'object'
+      ) {
+        throw new Error(
+          'Format backup tidak valid.'
+        );
+      }
+
+      const data =
+        backupData as Record<string, unknown>;
+
+      if (data.format !== 'novels-creator') {
+        throw new Error(
+          'File bukan backup Novel\'s Creator.'
+        );
+      }
+
+      if (data.version !== 1) {
+        throw new Error(
+          'Versi backup tidak didukung.'
+        );
+      }
+
+      const response =
+        await apiRequest<BackupResponse>(
+          '/backup/import',
+          {
+            method: 'POST',
+            body: JSON.stringify(backupData),
+          }
+        );
+
+      if (!response?.success) {
+        throw new Error(
+          response?.message ||
+            'Gagal memulihkan data backup.'
+        );
+      }
+
+      setSuccessMsg(
+        response.message ||
+          'Data berhasil dipulihkan. Memuat ulang data studio...'
+      );
+
+      // Beri kesempatan UI menampilkan pesan sukses
+      await new Promise((resolve) =>
+        setTimeout(resolve, 500)
+      );
+
+      // Refresh data dari backend
+      if (onDataImported) {
+        await onDataImported();
+      }
+
+      if (onDataRestored) {
+        await onDataRestored();
+      }
+
+      setSuccessMsg(
+        'Data berhasil dipulihkan dan studio telah diperbarui.'
+      );
+
+      setTimeout(() => {
+        setSuccessMsg(null);
+      }, 2500);
+    } catch (error) {
+      console.error(
+        'Gagal mengimpor backup:',
+        error
+      );
+
+      setErrorMsg(
+        error instanceof Error
+          ? error.message
+          : 'Gagal memulihkan data dari file backup.'
+      );
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   return (
@@ -423,12 +592,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           </div>
         )}
 
-        {/* Modal Body with Scroll */}
+        {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
-          {/* TAB 1: IDENTITAS PENULIS */}
+          {/* TAB 1 */}
           {activeTab === 'profile' && (
             <div className="space-y-5">
-              {/* Avatar Upload Section */}
+              {/* Avatar */}
               <div className="flex flex-col sm:flex-row items-center gap-5 p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl">
                 <div className="relative group w-24 h-24 rounded-full border-2 border-[#D4AF37]/40 bg-[#1E1E2E] overflow-hidden flex items-center justify-center shrink-0 shadow-lg">
                   {avatarUrl ? (
@@ -438,7 +607,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-[#6E6E85] bg-gradient-to-b from-[#202030] to-[#141420]">
+                    <div className="w-full h-full flex flex-col items-center justify-center text-[#6E6E85] bg-linear-to-b from-[#202030] to-[#141420]">
                       <Camera className="w-7 h-7 mb-1 text-[#D4AF37]/60" />
 
                       <span className="text-[9px] uppercase tracking-wider text-[#A0A0B5]">
@@ -449,7 +618,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() =>
+                      fileInputRef.current?.click()
+                    }
                     className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white text-[10px] transition-opacity cursor-pointer"
                   >
                     <Upload className="w-4 h-4 mb-0.5 text-[#D4AF37]" />
@@ -477,7 +648,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() =>
+                        fileInputRef.current?.click()
+                      }
                       className="py-1.5 px-3 bg-[#242438] hover:bg-[#303048] border border-[#3A3A54] rounded-lg text-xs text-[#E0E0E0] flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5 text-[#D4AF37]" />
@@ -498,7 +671,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Author Names & Pen Name */}
+              {/* Names */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
@@ -509,7 +682,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <input
                     type="text"
                     value={authorName}
-                    onChange={(e) => setAuthorName(e.target.value)}
+                    onChange={(e) =>
+                      setAuthorName(e.target.value)
+                    }
                     placeholder="Nama Penulis"
                     className="w-full px-3.5 py-2.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs sm:text-sm text-[#E0E0E0] outline-none transition-colors"
                   />
@@ -523,14 +698,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <input
                     type="text"
                     value={penName}
-                    onChange={(e) => setPenName(e.target.value)}
+                    onChange={(e) =>
+                      setPenName(e.target.value)
+                    }
                     placeholder="Contoh: Aria Ravenwood"
                     className="w-full px-3.5 py-2.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs sm:text-sm text-[#E0E0E0] outline-none transition-colors"
                   />
                 </div>
               </div>
 
-              {/* Bio / Author Tagline */}
+              {/* Bio */}
               <div>
                 <label className="block text-xs font-medium text-[#C8C8DC] mb-1.5">
                   Bio / Tagline Penulis
@@ -538,23 +715,23 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
                 <textarea
                   value={bio}
-                  onChange={(e) => setBio(e.target.value)}
+                  onChange={(e) =>
+                    setBio(e.target.value)
+                  }
                   rows={3}
                   placeholder="Ceritakan sekelumit visi kepenulisanmu atau fokus genre ceritamu..."
                   className="w-full px-3.5 py-2.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs sm:text-sm text-[#E0E0E0] outline-none transition-colors resize-none"
                 />
               </div>
 
-              {/* Password update section */}
+              {/* Password */}
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl space-y-3">
                 <div className="flex items-center gap-2 text-xs font-semibold text-[#D4AF37]">
                   <Lock className="w-4 h-4" />
-
                   <span>Ubah Kata Sandi (Opsional)</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Current Password */}
                   <div>
                     <label className="block text-[11px] text-[#A0A0B5] mb-1">
                       Kata Sandi Saat Ini
@@ -563,14 +740,15 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <input
                       type="password"
                       value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      onChange={(e) =>
+                        setCurrentPassword(e.target.value)
+                      }
                       placeholder="••••••••"
                       autoComplete="current-password"
                       className="w-full px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] rounded-lg text-xs text-[#E0E0E0] outline-none"
                     />
                   </div>
 
-                  {/* New Password */}
                   <div>
                     <label className="block text-[11px] text-[#A0A0B5] mb-1">
                       Kata Sandi Baru
@@ -579,14 +757,15 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <input
                       type="password"
                       value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
+                      onChange={(e) =>
+                        setNewPassword(e.target.value)
+                      }
                       placeholder="••••••••"
                       autoComplete="new-password"
                       className="w-full px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] rounded-lg text-xs text-[#E0E0E0] outline-none"
                     />
                   </div>
 
-                  {/* Confirm Password */}
                   <div>
                     <label className="block text-[11px] text-[#A0A0B5] mb-1">
                       Konfirmasi Kata Sandi Baru
@@ -595,7 +774,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <input
                       type="password"
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) =>
+                        setConfirmPassword(e.target.value)
+                      }
                       placeholder="••••••••"
                       autoComplete="new-password"
                       className="w-full px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] rounded-lg text-xs text-[#E0E0E0] outline-none"
@@ -606,7 +787,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 {passwordMsg && (
                   <p
                     className={`text-xs ${
-                      passwordMsg.toLowerCase().includes('berhasil')
+                      passwordMsg
+                        .toLowerCase()
+                        .includes('berhasil')
                         ? 'text-emerald-400'
                         : 'text-red-300'
                     }`}
@@ -618,10 +801,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: TARGET & PREFERENSI */}
+          {/* TAB 2 */}
           {activeTab === 'writing' && (
             <div className="space-y-5">
-              {/* Daily Word Goal */}
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl">
                 <div className="flex items-center gap-2 mb-2">
                   <Target className="w-4 h-4 text-[#D4AF37]" />
@@ -643,7 +825,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     step={100}
                     value={dailyWordGoal}
                     onChange={(e) =>
-                      setDailyWordGoal(Number(e.target.value))
+                      setDailyWordGoal(
+                        Number(e.target.value)
+                      )
                     }
                     className="w-36 px-3 py-2 bg-[#1C1C2C] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-sm font-mono text-[#FAF7EE] outline-none"
                   />
@@ -656,14 +840,17 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: CADANGAN & EKSPOR DATA */}
+          {/* TAB 3 */}
           {activeTab === 'backup' && (
             <div className="space-y-4">
+              {/* EXPORT */}
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl">
                 <h4 className="text-xs font-semibold text-[#FAF7EE] mb-1 flex items-center gap-2">
                   <Download className="w-4 h-4 text-[#D4AF37]" />
 
-                  <span>Ekspor Cadangan Semua Data (JSON)</span>
+                  <span>
+                    Ekspor Cadangan Semua Data (JSON)
+                  </span>
                 </h4>
 
                 <p className="text-xs text-[#8E8EA4] mb-3">
@@ -673,14 +860,22 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={handleExportJSON}
-                  className="py-2 px-4 bg-[#242438] hover:bg-[#30304C] border border-[#3A3A56] rounded-xl text-xs font-medium text-[#FAF7EE] flex items-center gap-2 transition-colors cursor-pointer"
+                  disabled={
+                    isExporting || isImporting
+                  }
+                  className="py-2 px-4 bg-[#242438] hover:bg-[#30304C] border border-[#3A3A56] rounded-xl text-xs font-medium text-[#FAF7EE] flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
 
-                  <span>Unduh File Cadangan (.json)</span>
+                  <span>
+                    {isExporting
+                      ? 'Menyiapkan Cadangan...'
+                      : 'Unduh File Cadangan (.json)'}
+                  </span>
                 </button>
               </div>
 
+              {/* IMPORT */}
               <div className="p-4 bg-[#161624] border border-[#2A2A3C] rounded-2xl">
                 <h4 className="text-xs font-semibold text-[#FAF7EE] mb-1 flex items-center gap-2">
                   <UploadCloud className="w-4 h-4 text-[#D4AF37]" />
@@ -704,19 +899,28 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => backupImportRef.current?.click()}
-                  className="py-2 px-4 bg-[#242438] hover:bg-[#30304C] border border-[#3A3A56] rounded-xl text-xs font-medium text-[#FAF7EE] flex items-center gap-2 transition-colors cursor-pointer"
+                  disabled={
+                    isExporting || isImporting
+                  }
+                  onClick={() =>
+                    backupImportRef.current?.click()
+                  }
+                  className="py-2 px-4 bg-[#242438] hover:bg-[#30304C] border border-[#3A3A56] rounded-xl text-xs font-medium text-[#FAF7EE] flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <UploadCloud className="w-3.5 h-3.5 text-[#D4AF37]" />
 
-                  <span>Pilih Berkas Cadangan (.json)</span>
+                  <span>
+                    {isImporting
+                      ? 'Memulihkan Data...'
+                      : 'Pilih Berkas Cadangan (.json)'}
+                  </span>
                 </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer Actions */}
+        {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 bg-[#181826] border-t border-[#2A2A3C]">
           <button
             type="button"
@@ -729,7 +933,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           <button
             type="button"
             onClick={handleSaveProfile}
-            className="py-2 px-5 bg-gradient-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
+            disabled={
+              isExporting || isImporting
+            }
+            className="py-2 px-5 bg-linear-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="w-4 h-4" />
 

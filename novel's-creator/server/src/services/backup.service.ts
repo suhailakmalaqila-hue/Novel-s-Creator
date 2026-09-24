@@ -1091,8 +1091,8 @@ export async function importUserBackup(
         `,
                 [
                     userId,
-                    note.note_scope ?? "global",
-                    note.note_category ?? "general",
+                    note.note_scope ?? "other",
+                    note.note_category ?? "Lainnya",
                     newBookId,
                     newChapterId,
                     newCharacterId,
