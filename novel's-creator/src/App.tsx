@@ -789,7 +789,7 @@ function AdminDashboardView({
           </div>
 
           {loading ? (
-            <div className="min-h-[240px] flex items-center justify-center">
+            <div className="min-h-60 flex items-center justify-center">
               <div className="flex items-center gap-3 text-sm text-[#8A8A9E]">
                 <RefreshCw className="w-4 h-4 animate-spin text-[#D4AF37]" />
 
@@ -799,7 +799,7 @@ function AdminDashboardView({
               </div>
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="min-h-[240px] flex flex-col items-center justify-center text-center px-6">
+            <div className="min-h-60 flex flex-col items-center justify-center text-center px-6">
               <Users className="w-10 h-10 text-[#45455A] mb-3" />
 
               <p className="text-sm text-[#C8C8DC]">
@@ -813,7 +813,7 @@ function AdminDashboardView({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px]">
+              <table className="w-full min-w-190">
                 <thead>
                   <tr className="border-b border-[#2A2A3C] bg-[#191925]">
                     <th className="text-left px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[#77778C] font-bold">

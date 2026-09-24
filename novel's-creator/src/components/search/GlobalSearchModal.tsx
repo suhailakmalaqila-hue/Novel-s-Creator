@@ -49,7 +49,23 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     } else {
       setQuery('');
     }
-  }, [isOpen]);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -58,44 +74,44 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   // Search Results
   const matchedBooks = q
     ? books.filter(
-        (b) =>
-          b.title.toLowerCase().includes(q) ||
-          b.synopsis.toLowerCase().includes(q) ||
-          b.genres.some((g) => g.toLowerCase().includes(q))
-      )
+      (b) =>
+        b.title.toLowerCase().includes(q) ||
+        b.synopsis.toLowerCase().includes(q) ||
+        b.genres.some((g) => g.toLowerCase().includes(q))
+    )
     : [];
 
   const matchedChapters = q
     ? chapters.filter(
-        (c) =>
-          c.title.toLowerCase().includes(q) ||
-          c.content.toLowerCase().includes(q)
-      )
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        c.content.toLowerCase().includes(q)
+    )
     : [];
 
   const matchedCharacters = q
     ? characters.filter(
-        (c) =>
-          c.fullName.toLowerCase().includes(q) ||
-          c.alias.toLowerCase().includes(q) ||
-          c.roleTag.toLowerCase().includes(q) ||
-          c.backstory.toLowerCase().includes(q) ||
-          c.physicalAppearance.toLowerCase().includes(q) ||
-          c.personalityTraits.toLowerCase().includes(q) ||
-          c.customAttributes.some(
-            (a) =>
-              a.key.toLowerCase().includes(q) ||
-              a.value.toLowerCase().includes(q)
-          )
-      )
+      (c) =>
+        c.fullName.toLowerCase().includes(q) ||
+        c.alias.toLowerCase().includes(q) ||
+        c.roleTag.toLowerCase().includes(q) ||
+        c.backstory.toLowerCase().includes(q) ||
+        c.physicalAppearance.toLowerCase().includes(q) ||
+        c.personalityTraits.toLowerCase().includes(q) ||
+        c.customAttributes.some(
+          (a) =>
+            a.key.toLowerCase().includes(q) ||
+            a.value.toLowerCase().includes(q)
+        )
+    )
     : [];
 
   const matchedNotes = q
     ? notes.filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          n.content.toLowerCase().includes(q)
-      )
+      (n) =>
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q)
+    )
     : [];
 
   const totalResults =
