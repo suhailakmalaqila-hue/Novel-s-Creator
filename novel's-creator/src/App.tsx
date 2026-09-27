@@ -1390,6 +1390,17 @@ function MainAppContent() {
     setIsQuickNotesOpen,
   ] = useState(false);
 
+  /**
+   * Note yang harus difokuskan ketika
+   * dibuka melalui Global Search.
+   */
+  const [
+    focusedQuickNoteId,
+    setFocusedQuickNoteId,
+  ] = useState<string | null>(
+    null
+  );
+
   const books: Book[] =
     useMemo(
       () =>
@@ -1604,6 +1615,7 @@ function MainAppContent() {
       setIsProfileSettingsOpen(false);
       setIsSearchOpen(false);
       setIsQuickNotesOpen(false);
+      setFocusedQuickNoteId(null);
 
       setCurrentView("workspace");
 
@@ -2250,6 +2262,20 @@ function MainAppContent() {
         }
       },
       [removeCharacter]
+    );
+
+  const handleOpenQuickNote =
+    useCallback(
+      (note: QuickNote) => {
+        setFocusedQuickNoteId(
+          note.id
+        );
+
+        setIsQuickNotesOpen(
+          true
+        );
+      },
+      []
     );
 
   /**
@@ -2969,17 +2995,47 @@ function MainAppContent() {
         isOpen={
           isQuickNotesOpen
         }
+
         notes={
           displayQuickNotes
         }
-        onClose={() =>
-          setIsQuickNotesOpen(
-            false
+
+        books={
+          displayBooks
+        }
+
+        chapters={
+          displayChapters
+        }
+
+        characters={
+          displayCharacters
+        }
+
+        focusNoteId={
+          focusedQuickNoteId
+        }
+
+        onFocusHandled={() =>
+          setFocusedQuickNoteId(
+            null
           )
         }
+
+        onClose={() => {
+          setIsQuickNotesOpen(
+            false
+          );
+
+          setFocusedQuickNoteId(
+            null
+          );
+        }}
+
         onSaveNote={
           handleSaveQuickNote
         }
+
         onDeleteNote={
           handleDeleteQuickNote
         }
@@ -3025,7 +3081,11 @@ function MainAppContent() {
             "characters"
           );
         }}
-        onSelectNote={() => {
+        onSelectNote={(note) => {
+          setFocusedQuickNoteId(
+            note.id
+          );
+
           setIsQuickNotesOpen(
             true
           );

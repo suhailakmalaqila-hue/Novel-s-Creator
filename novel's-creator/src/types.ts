@@ -6,7 +6,6 @@ export type RoleTag = 'Protagonis' | 'Antagonis' | 'Side' | 'Mentor' | 'Rival' |
 export type CharacterStatus = 'Hidup' | 'Mati' | 'Hilang' | 'Disegel' | 'Reinkarnasi' | 'Lainnya';
 export type BookStatus = 'draft' | 'ongoing' | 'completed' | 'hiatus';
 export type ChapterStatus = 'draft' | 'review' | 'published';
-export type NoteCategory = 'Ide Spontan' | 'Dialog Draft' | 'Plot Hole' | 'Worldbuilding' | 'Lainnya';
 export type SaveStatus = 'unsaved' | 'saving' | 'saved' | 'error';
 export type AppView = 'splash' | 'auth' | 'workspace' | 'characters' | 'editor';
 
@@ -113,14 +112,58 @@ export interface Book {
   updatedAt: number;
 }
 
+/**
+ * =========================================================
+ * QUICK NOTE
+ * =========================================================
+ */
+
+export type NoteCategory =
+  | 'Ide Spontan'
+  | 'Dialog Draft'
+  | 'Plot Hole'
+  | 'Worldbuilding'
+  | 'Lainnya';
+
+export type NoteScope =
+  | 'book'
+  | 'chapter'
+  | 'character'
+  | 'other';
+
 export interface QuickNote {
   id: string;
+
   title: string;
   content: string;
+
+  /**
+   * Isi / jenis catatan.
+   */
   category: NoteCategory;
-  colorTag: string; // hex color for dark card accent
-  isPinned: boolean;
+
+  /**
+   * Konteks tempat note dikaitkan.
+   *
+   * other     = standalone
+   * book      = terkait buku
+   * chapter   = terkait chapter
+   * character = terkait character
+   */
+  noteScope: NoteScope;
+
+  /**
+   * Hanya salah satu reference ID
+   * yang boleh terisi sesuai noteScope.
+   */
   bookId?: string;
+  chapterId?: string;
+  characterId?: string;
+
+  colorTag: string;
+
+  isPinned: boolean;
+
   createdAt: number;
   updatedAt: number;
 }
