@@ -519,7 +519,7 @@ export const CharacterWikiView: React.FC<CharacterWikiViewProps> = ({
                         .map((attr) => (
                           <span
                             key={attr.id}
-                            className="text-[10px] text-[#D4AF37] bg-[#161624] px-2 py-0.5 rounded border border-[#2A2A3C] truncate max-w-[140px]"
+                            className="text-[10px] text-[#D4AF37] bg-[#161624] px-2 py-0.5 rounded border border-[#2A2A3C] truncate max-w-35"
                           >
                             {attr.key}: {attr.value}
                           </span>

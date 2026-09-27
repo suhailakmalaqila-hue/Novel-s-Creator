@@ -148,43 +148,19 @@ export const CharacterProvider: React.FC<{
     useState<CharacterMention[]>([]);
 
   /**
-   * =========================================================
-   * REQUEST VERSION
-   * =========================================================
-   *
-   * Setiap perubahan user membuat request sebelumnya
-   * tidak lagi valid.
-   *
-   * IMPORTANT:
-   * Request version hanya dinaikkan ketika memang
-   * ada perubahan identity atau ketika refresh baru dimulai.
+   * Tracker requestId berpandukan scope (bookId atau "__all__")
    */
   const characterRequestIdRef =
-    useRef(0);
+    useRef<Record<string, number>>({});
 
   /**
    * Identity user yang sedang aktif.
-   *
-   * Kita simpan di ref agar callback async dapat
-   * memeriksa bahwa response masih milik user yang benar.
    */
   const activeUserIdRef =
     useRef<string | null>(null);
 
   /**
-   * =========================================================
    * RESET KETIKA IDENTITY USER BERUBAH
-   * =========================================================
-   *
-   * Effect ini HANYA:
-   *
-   * - membatalkan request lama
-   * - membersihkan data user sebelumnya
-   * - membersihkan error
-   *
-   * Effect ini TIDAK memanggil refreshCharacters().
-   *
-   * Loading karakter dilakukan oleh effect khusus di bawah.
    */
   useEffect(() => {
     const nextUserId =
@@ -195,10 +171,6 @@ export const CharacterProvider: React.FC<{
     const previousUserId =
       activeUserIdRef.current;
 
-    /**
-     * Tidak melakukan reset jika identity
-     * sebenarnya masih sama.
-     */
     if (
       previousUserId ===
       nextUserId
@@ -206,25 +178,16 @@ export const CharacterProvider: React.FC<{
       return;
     }
 
-    /**
-     * Tandai identity baru.
-     */
     activeUserIdRef.current =
       nextUserId;
 
     /**
-     * Invalidasi semua request sebelumnya.
+     * Kosongkan semua request tracker apabila user bertukar
      */
-    characterRequestIdRef.current += 1;
+    characterRequestIdRef.current = {};
 
-    /**
-     * Jangan pernah membawa data character
-     * user sebelumnya ke user baru.
-     */
     setCharacters([]);
-
     setMentions([]);
-
     setError(null);
 
     if (!nextUserId) {
@@ -236,9 +199,7 @@ export const CharacterProvider: React.FC<{
   ]);
 
   /**
-   * =========================================================
    * REFRESH CHARACTERS
-   * =========================================================
    */
   const refreshCharacters =
     useCallback(
@@ -246,9 +207,6 @@ export const CharacterProvider: React.FC<{
         const currentUserId =
           activeUserIdRef.current;
 
-        /**
-         * Jangan request jika belum ada user aktif.
-         */
         if (
           !isAuthenticated ||
           !user?.id ||
@@ -259,10 +217,6 @@ export const CharacterProvider: React.FC<{
           return;
         }
 
-        /**
-         * Pastikan ref identity masih sama
-         * dengan AuthContext.
-         */
         if (
           currentUserId !==
           user.id
@@ -270,11 +224,13 @@ export const CharacterProvider: React.FC<{
           return;
         }
 
-        /**
-         * Request baru membatalkan request lama.
-         */
+        const requestKey = bookId ?? "__all__";
+
         const requestId =
-          ++characterRequestIdRef.current;
+          (characterRequestIdRef.current[requestKey] ?? 0) + 1;
+
+        characterRequestIdRef.current[requestKey] =
+          requestId;
 
         try {
           setLoading(true);
@@ -283,21 +239,13 @@ export const CharacterProvider: React.FC<{
           const data =
             await getCharacters(bookId);
 
-          /**
-           * Jangan biarkan response request lama
-           * menimpa state.
-           */
           if (
             requestId !==
-            characterRequestIdRef.current
+            characterRequestIdRef.current[requestKey]
           ) {
             return;
           }
 
-          /**
-           * Jangan memasukkan response jika
-           * user sudah berganti ketika request berjalan.
-           */
           if (
             activeUserIdRef.current !==
             user.id
@@ -305,19 +253,58 @@ export const CharacterProvider: React.FC<{
             return;
           }
 
-          setCharacters(
-            Array.isArray(data)
-              ? data
-              : []
-          );
+          const incoming = Array.isArray(data) ? data : [];
+
+          if (!bookId) {
+            // Request Wiki Global
+            setCharacters(incoming);
+            return;
+          }
+
+          // Request khusus buku: Penyelarasan (reconciliation)
+          setCharacters((previous) => {
+            const incomingById = new Map(
+              incoming.map((character) => [
+                character.id,
+                character,
+              ])
+            );
+
+            const previousIds = new Set(
+              previous.map((character) => character.id)
+            );
+
+            const next = previous.map((character) => {
+              const fresh = incomingById.get(character.id);
+
+              if (fresh) {
+                return fresh;
+              }
+
+              if (character.bookIds?.includes(bookId)) {
+                return {
+                  ...character,
+                  bookIds: character.bookIds.filter(
+                    (id) => id !== bookId
+                  ),
+                };
+              }
+
+              return character;
+            });
+
+            for (const character of incoming) {
+              if (!previousIds.has(character.id)) {
+                next.push(character);
+              }
+            }
+
+            return next;
+          });
         } catch (err: any) {
-          /**
-           * Request lama tidak boleh mengubah error
-           * user yang sekarang.
-           */
           if (
             requestId !==
-            characterRequestIdRef.current
+            characterRequestIdRef.current[requestKey]
           ) {
             return;
           }
@@ -336,7 +323,7 @@ export const CharacterProvider: React.FC<{
 
           setError(
             err?.message ??
-              "Gagal mengambil characters"
+            "Gagal mengambil characters"
           );
 
           setCharacters([]);
@@ -345,7 +332,7 @@ export const CharacterProvider: React.FC<{
         } finally {
           if (
             requestId ===
-            characterRequestIdRef.current
+            characterRequestIdRef.current[requestKey]
           ) {
             setLoading(false);
           }
@@ -358,15 +345,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * INITIAL LOAD / USER CHANGE
-   * =========================================================
-   *
-   * CharacterContext sendiri yang melakukan
-   * initial character loading.
-   *
-   * Dengan demikian App.tsx tidak perlu lagi
-   * memanggil refreshCharacters() saat user berubah.
    */
   useEffect(() => {
     if (
@@ -376,12 +355,6 @@ export const CharacterProvider: React.FC<{
       return;
     }
 
-    /**
-     * Identity ref sudah diset oleh effect
-     * reset di atas.
-     *
-     * Jalankan request hanya dari sini.
-     */
     void refreshCharacters();
   }, [
     isAuthenticated,
@@ -390,9 +363,7 @@ export const CharacterProvider: React.FC<{
   ]);
 
   /**
-   * =========================================================
    * ADD CHARACTER
-   * =========================================================
    */
   const addCharacter =
     useCallback(
@@ -402,14 +373,11 @@ export const CharacterProvider: React.FC<{
         const character =
           await createCharacter(input);
 
-        /**
-         * Hanya update state jika user masih aktif.
-         */
         if (
           isAuthenticated &&
           user?.id &&
           activeUserIdRef.current ===
-            user.id
+          user.id
         ) {
           setCharacters((prev) => [
             character,
@@ -426,9 +394,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * EDIT CHARACTER
-   * =========================================================
    */
   const editCharacter =
     useCallback(
@@ -446,7 +412,7 @@ export const CharacterProvider: React.FC<{
           isAuthenticated &&
           user?.id &&
           activeUserIdRef.current ===
-            user.id
+          user.id
         ) {
           setCharacters((prev) =>
             prev.map((item) =>
@@ -466,9 +432,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * DELETE CHARACTER
-   * =========================================================
    */
   const removeCharacter =
     useCallback(
@@ -490,9 +454,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * ADD RELATIONSHIP
-   * =========================================================
    */
   const addRelationship =
     useCallback(
@@ -513,9 +475,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * EDIT RELATIONSHIP
-   * =========================================================
    */
   const editRelationship =
     useCallback(
@@ -538,9 +498,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * DELETE RELATIONSHIP
-   * =========================================================
    */
   const removeRelationship =
     useCallback(
@@ -561,9 +519,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * ADD CUSTOM ATTRIBUTE
-   * =========================================================
    */
   const addCustomAttribute =
     useCallback(
@@ -584,9 +540,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * EDIT CUSTOM ATTRIBUTE
-   * =========================================================
    */
   const editCustomAttribute =
     useCallback(
@@ -609,9 +563,7 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * DELETE CUSTOM ATTRIBUTE
-   * =========================================================
    */
   const removeCustomAttribute =
     useCallback(
@@ -632,11 +584,8 @@ export const CharacterProvider: React.FC<{
     );
 
   /**
-   * =========================================================
    * MENTIONS
-   * =========================================================
    */
-
   const refreshMentions =
     useCallback(
       async (
@@ -647,7 +596,7 @@ export const CharacterProvider: React.FC<{
           !isAuthenticated ||
           !user?.id ||
           activeUserIdRef.current !==
-            user.id
+          user.id
         ) {
           setMentions([]);
           return;
@@ -659,10 +608,6 @@ export const CharacterProvider: React.FC<{
             chapterId
           );
 
-        /**
-         * Jangan memasukkan mention jika user
-         * sudah berganti ketika request berjalan.
-         */
         if (
           activeUserIdRef.current !==
           user.id
