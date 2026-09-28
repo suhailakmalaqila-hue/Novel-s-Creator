@@ -2,12 +2,6 @@ import { Request, Response } from "express";
 
 import { loginUser } from "../services/auth.service";
 
-export const register = async (req: Request, res: Response) => {
-  return res.status(403).json({
-    message: 'Registrasi mandiri dinonaktifkan. Akun dibuat oleh Admin.'
-  });
-};
-
 export async function login(
   req: Request,
   res: Response

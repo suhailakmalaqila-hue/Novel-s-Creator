@@ -30,6 +30,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-router-dom": "^7.18.4",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
     "vite": "^6.2.3",
     "zod": "^4.5.4"
   },
@@ -43,6 +45,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@types/react-router-dom": "^5.3.3",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",

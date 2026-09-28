@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./config/swagger";
 
 import pool from "./config/database";
 
@@ -34,6 +36,12 @@ app.use(cors());
  * sebelum sampai controller.
  */
 app.use(express.json({ limit: "12mb" }));
+
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec)
+);
 
 app.get("/api/health", async (_req, res) => {
   try {
