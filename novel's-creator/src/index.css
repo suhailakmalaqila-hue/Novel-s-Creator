@@ -96,52 +96,74 @@
    ============================================================ */
 
 @keyframes pulseGold {
+
   0%,
   100% {
     box-shadow:
-      0 0 15px
-      rgba(
-        212,
+      0 0 15px rgba(212,
         175,
         55,
-        0.2
-      );
+        0.2);
 
     border-color:
-      rgba(
-        212,
+      rgba(212,
         175,
         55,
-        0.4
-      );
+        0.4);
   }
 
   50% {
     box-shadow:
-      0 0 25px
-      rgba(
-        212,
+      0 0 25px rgba(212,
         175,
         55,
-        0.45
-      );
+        0.45);
 
     border-color:
-      rgba(
-        212,
+      rgba(212,
         175,
         55,
-        0.8
-      );
+        0.8);
   }
 }
 
 .animate-gold-pulse {
   animation:
-    pulseGold
-    3s
-    infinite
-    ease-in-out;
+    pulseGold 3s infinite ease-in-out;
+}
+
+
+/* ============================================================
+   LUCIDE ICONS
+   ============================================================ */
+
+/*
+ * Semua icon pada Studio Editor menggunakan lucide-react.
+ *
+ * Lucide menggambar icon menggunakan SVG + currentColor.
+ * Rule ini memastikan SVG tidak ikut menjadi transparan
+ * akibat layer editor/highlight.
+ */
+
+svg.lucide {
+  display: block !important;
+  flex-shrink: 0;
+  overflow: visible;
+  stroke: currentColor !important;
+}
+
+/*
+ * Pastikan setiap elemen path Lucide tetap menggunakan
+ * warna icon dari parent button.
+ */
+
+svg.lucide path,
+svg.lucide circle,
+svg.lucide line,
+svg.lucide polyline,
+svg.lucide polygon,
+svg.lucide rect {
+  stroke: currentColor !important;
 }
 
 
@@ -163,8 +185,7 @@
  * hasil selection akan terlihat seperti teks berantakan/dobel.
  */
 
-#novel-editor-container
-[aria-hidden="true"] {
+#novel-editor-container [aria-hidden="true"] {
   color:
     transparent !important;
 
@@ -231,12 +252,10 @@
     #FAF7EE !important;
 
   background:
-    rgba(
-      212,
+    rgba(212,
       175,
       55,
-      0.32
-    ) !important;
+      0.32) !important;
 }
 
 #editor-manuscript-textarea::-moz-selection {
@@ -244,12 +263,10 @@
     #FAF7EE !important;
 
   background:
-    rgba(
-      212,
+    rgba(212,
       175,
       55,
-      0.32
-    ) !important;
+      0.32) !important;
 }
 
 

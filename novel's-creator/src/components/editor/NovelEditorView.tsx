@@ -2577,8 +2577,18 @@ export const NovelEditorView: React.FC<
 
         <div className="bg-[#1E1E2E] border border-[#2A2A3C] rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div
-            className="flex flex-wrap items-center gap-3"
-            data-tour="editor-selector-bar"
+            className="flex flex-wrap items-center gap-1"
+            data-tour="editor-formatting-tools"
+            onMouseDown={(event) => {
+              /*
+               * Jangan biarkan klik toolbar mengambil alih
+               * selection textarea.
+               *
+               * Dengan ini selectionStart / selectionEnd
+               * tetap menunjuk ke teks yang sedang dipilih.
+               */
+              event.preventDefault();
+            }}
           >
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-[#D4AF37] shrink-0" />
@@ -3275,9 +3285,7 @@ export const NovelEditorView: React.FC<
                    * Saat panel ditutup:
                    * - textarea kembali menampilkan teks normal
                    */
-                  color: isMentionPanelOpen
-                    ? 'transparent'
-                    : '#FAF7EE',
+                  color: '#FAF7EE',
 
                   caretColor: '#FAF7EE',
                 }}
