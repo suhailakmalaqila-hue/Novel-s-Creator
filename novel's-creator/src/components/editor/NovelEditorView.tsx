@@ -2579,16 +2579,6 @@ export const NovelEditorView: React.FC<
           <div
             className="flex flex-wrap items-center gap-1"
             data-tour="editor-formatting-tools"
-            onMouseDown={(event) => {
-              /*
-               * Jangan biarkan klik toolbar mengambil alih
-               * selection textarea.
-               *
-               * Dengan ini selectionStart / selectionEnd
-               * tetap menunjuk ke teks yang sedang dipilih.
-               */
-              event.preventDefault();
-            }}
           >
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-[#D4AF37] shrink-0" />
@@ -3200,7 +3190,7 @@ export const NovelEditorView: React.FC<
                 <div
                   ref={mentionHighlightRef}
                   aria-hidden="true"
-                  className="absolute inset-0 w-full min-h-120 overflow-hidden pointer-events-none whitespace-pre-wrap wrap-break-word"
+                  className="editor-mention-highlight-layer absolute inset-0 w-full min-h-120 overflow-hidden pointer-events-none whitespace-pre-wrap wrap-break-word"
                   style={{
                     fontFamily:
                       fontFamily === 'serif'

@@ -96,40 +96,52 @@
    ============================================================ */
 
 @keyframes pulseGold {
-
   0%,
   100% {
     box-shadow:
-      0 0 15px rgba(212,
+      0 0 15px
+      rgba(
+        212,
         175,
         55,
-        0.2);
+        0.2
+      );
 
     border-color:
-      rgba(212,
+      rgba(
+        212,
         175,
         55,
-        0.4);
+        0.4
+      );
   }
 
   50% {
     box-shadow:
-      0 0 25px rgba(212,
+      0 0 25px
+      rgba(
+        212,
         175,
         55,
-        0.45);
+        0.45
+      );
 
     border-color:
-      rgba(212,
+      rgba(
+        212,
         175,
         55,
-        0.8);
+        0.8
+      );
   }
 }
 
 .animate-gold-pulse {
   animation:
-    pulseGold 3s infinite ease-in-out;
+    pulseGold
+    3s
+    infinite
+    ease-in-out;
 }
 
 
@@ -138,24 +150,28 @@
    ============================================================ */
 
 /*
- * Semua icon pada Studio Editor menggunakan lucide-react.
+ * JANGAN menggunakan selector:
  *
- * Lucide menggambar icon menggunakan SVG + currentColor.
- * Rule ini memastikan SVG tidak ikut menjadi transparan
- * akibat layer editor/highlight.
+ * [aria-hidden="true"]
+ *
+ * karena icon Lucide juga menggunakan aria-hidden="true".
+ *
+ * Icon harus tetap terlihat walaupun memiliki aria-hidden.
  */
 
 svg.lucide {
-  display: block !important;
-  flex-shrink: 0;
-  overflow: visible;
-  stroke: currentColor !important;
-}
+  display:
+    block !important;
 
-/*
- * Pastikan setiap elemen path Lucide tetap menggunakan
- * warna icon dari parent button.
- */
+  flex-shrink:
+    0;
+
+  overflow:
+    visible;
+
+  stroke:
+    currentColor !important;
+}
 
 svg.lucide path,
 svg.lucide circle,
@@ -163,7 +179,8 @@ svg.lucide line,
 svg.lucide polyline,
 svg.lucide polygon,
 svg.lucide rect {
-  stroke: currentColor !important;
+  stroke:
+    currentColor !important;
 }
 
 
@@ -172,20 +189,16 @@ svg.lucide rect {
    ============================================================ */
 
 /*
- * IMPORTANT
+ * Hanya highlight layer mention yang dibuat transparan.
  *
- * Editor memakai:
+ * JANGAN menggunakan:
  *
- *   1. textarea sebagai sumber teks utama
- *   2. highlight layer sebagai layer visual mention
+ * #novel-editor-container [aria-hidden="true"]
  *
- * Highlight layer TIDAK boleh menggambar glyph/text.
- *
- * Kalau text pada kedua layer terlihat,
- * hasil selection akan terlihat seperti teks berantakan/dobel.
+ * karena selector tersebut juga akan mengenai icon Lucide.
  */
 
-#novel-editor-container [aria-hidden="true"] {
+.editor-mention-highlight-layer {
   color:
     transparent !important;
 
@@ -196,7 +209,7 @@ svg.lucide rect {
     none !important;
 
   pointer-events:
-    none;
+    none !important;
 }
 
 
@@ -241,7 +254,7 @@ svg.lucide rect {
 
 
 /* ============================================================
-   SELECTION
+   TEXT SELECTION
    ============================================================ */
 
 #editor-manuscript-textarea::selection {
@@ -252,10 +265,12 @@ svg.lucide rect {
     #FAF7EE !important;
 
   background:
-    rgba(212,
+    rgba(
+      212,
       175,
       55,
-      0.32) !important;
+      0.32
+    ) !important;
 }
 
 #editor-manuscript-textarea::-moz-selection {
@@ -263,10 +278,12 @@ svg.lucide rect {
     #FAF7EE !important;
 
   background:
-    rgba(212,
+    rgba(
+      212,
       175,
       55,
-      0.32) !important;
+      0.32
+    ) !important;
 }
 
 
@@ -281,16 +298,18 @@ svg.lucide rect {
 
 
 /* ============================================================
-   SPELLCHECK
+   SPELLCHECK / TEXT DECORATION
    ============================================================ */
 
 /*
- * Spellcheck utama dimatikan dari React:
+ * Garis merah spellcheck dikontrol oleh browser,
+ * sehingga CSS tidak selalu dapat mematikannya.
  *
- * textarea.spellcheck = false
+ * Pastikan textarea juga memiliki:
  *
- * CSS ini hanya memastikan browser tidak memberi
- * text-decoration tambahan.
+ * spellCheck={false}
+ *
+ * di NovelEditorView.tsx.
  */
 
 #editor-manuscript-textarea {
