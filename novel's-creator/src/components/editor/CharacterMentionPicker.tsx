@@ -21,7 +21,15 @@ interface CharacterMentionPickerProps {
   characters: CharacterWiki[];
   mentions: CharacterMention[];
   disabled?: boolean;
+
+  /*
+   * Error dari NovelEditorView.
+   */
   error?: string | null;
+
+  /*
+   * Callback ketika user memilih character.
+   */
   onCreateMention: (
     character: CharacterWiki,
     selectionStart: number,
@@ -51,6 +59,9 @@ export const CharacterMentionPicker: React.FC<
   const wrapperRef =
     useRef<HTMLDivElement>(null);
 
+  /*
+   * Close ketika klik di luar picker.
+   */
   useEffect(() => {
     const handlePointerDown =
       (event: MouseEvent) => {
@@ -77,12 +88,18 @@ export const CharacterMentionPicker: React.FC<
     };
   }, []);
 
+  /*
+   * Bersihkan search ketika picker ditutup.
+   */
   useEffect(() => {
     if (!isOpen) {
       setSearch('');
     }
   }, [isOpen]);
 
+  /*
+   * Filter character.
+   */
   const filteredCharacters =
     useMemo(() => {
       const keyword =
@@ -119,6 +136,11 @@ export const CharacterMentionPicker: React.FC<
       search,
     ]);
 
+  /*
+   * ============================================================
+   * CREATE CHARACTER MENTION
+   * ============================================================
+   */
   const handleCharacterClick =
     async (
       character: CharacterWiki
@@ -132,6 +154,9 @@ export const CharacterMentionPicker: React.FC<
         return;
       }
 
+      /*
+       * Ambil selection TERKINI dari textarea.
+       */
       const start =
         textarea.selectionStart;
 
@@ -147,11 +172,17 @@ export const CharacterMentionPicker: React.FC<
       setSearch('');
       setIsOpen(false);
 
+      /*
+       * Kembalikan fokus ke editor.
+       */
       requestAnimationFrame(() => {
         textarea.focus();
       });
     };
 
+  /*
+   * Hitung jumlah mention character.
+   */
   const characterMentionCount =
     (characterId: string) =>
       mentions.filter(
@@ -165,6 +196,10 @@ export const CharacterMentionPicker: React.FC<
       ref={wrapperRef}
       className="relative"
     >
+      {/* ======================================================
+          CHARACTER BUTTON
+          ====================================================== */}
+
       <button
         type="button"
         disabled={disabled}
@@ -182,7 +217,9 @@ export const CharacterMentionPicker: React.FC<
       >
         <AtSign className="w-3.5 h-3.5" />
 
-        <span>Character</span>
+        <span>
+          Character
+        </span>
 
         <ChevronDown
           className={`w-3 h-3 transition-transform ${
@@ -205,13 +242,23 @@ export const CharacterMentionPicker: React.FC<
         )}
       </button>
 
+      {/* ======================================================
+          DROPDOWN
+          ====================================================== */}
+
       {isOpen && (
         <div className="absolute left-0 top-full mt-2 z-[60] w-[310px] bg-[#1E1E2E] border border-[#35354C] rounded-xl shadow-2xl overflow-hidden">
+
+          {/* HEADER */}
+
           <div className="p-3 border-b border-[#2A2A3C]">
+
             <div className="flex items-center gap-2 mb-2">
+
               <AtSign className="w-3.5 h-3.5 text-[#D4AF37]" />
 
               <div>
+
                 <p className="text-xs font-semibold text-[#FAF7EE]">
                   Character Mention
                 </p>
@@ -220,7 +267,9 @@ export const CharacterMentionPicker: React.FC<
                   Tandai teks dengan karakter
                   tertentu.
                 </p>
+
               </div>
+
             </div>
 
             <input
@@ -235,14 +284,22 @@ export const CharacterMentionPicker: React.FC<
               autoFocus
               className="w-full px-3 py-2 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-lg text-xs text-[#FAF7EE] placeholder-[#5F5F76] outline-none"
             />
+
           </div>
 
+          {/* CHARACTER LIST */}
+
           <div className="max-h-72 overflow-y-auto p-1.5">
+
             {filteredCharacters.length ===
             0 ? (
+
               <div className="px-3 py-7 text-center">
+
                 <div className="w-9 h-9 mx-auto mb-2 rounded-xl bg-[#242438] border border-[#35354C] flex items-center justify-center">
+
                   <UserRound className="w-4 h-4 text-[#55556C]" />
+
                 </div>
 
                 <p className="text-xs text-[#7E7E94]">
@@ -251,8 +308,11 @@ export const CharacterMentionPicker: React.FC<
                     ? 'Belum ada karakter yang terhubung dengan buku ini.'
                     : 'Karakter tidak ditemukan.'}
                 </p>
+
               </div>
+
             ) : (
+
               filteredCharacters.map(
                 (character) => {
                   const mentionCount =
@@ -276,8 +336,13 @@ export const CharacterMentionPicker: React.FC<
                       }
                       className="w-full px-3 py-2.5 rounded-lg hover:bg-[#2A2A3E] disabled:opacity-50 text-left transition-colors flex items-center gap-2.5 cursor-pointer disabled:cursor-not-allowed"
                     >
+
+                      {/* AVATAR */}
+
                       <div className="w-9 h-9 rounded-lg bg-[#242438] border border-[#35354C] flex items-center justify-center shrink-0 overflow-hidden">
+
                         {character.avatarUrl ? (
+
                           <img
                             src={
                               character.avatarUrl
@@ -285,12 +350,19 @@ export const CharacterMentionPicker: React.FC<
                             alt=""
                             className="w-full h-full object-cover"
                           />
+
                         ) : (
+
                           <UserRound className="w-4 h-4 text-[#D4AF37]" />
+
                         )}
+
                       </div>
 
+                      {/* NAME */}
+
                       <div className="min-w-0 flex-1">
+
                         <div className="text-xs font-semibold text-[#FAF7EE] truncate">
                           {
                             character.fullName
@@ -299,49 +371,72 @@ export const CharacterMentionPicker: React.FC<
 
                         {character.alias && (
                           <div className="text-[10px] text-[#7E7E94] truncate">
-                            {character.alias}
+                            {
+                              character.alias
+                            }
                           </div>
                         )}
+
                       </div>
 
+                      {/* MENTION COUNT */}
+
                       {mentionCount >
-                      0 && (
+                        0 && (
+
                         <div className="flex items-center gap-1.5 shrink-0">
+
                           <span className="text-[9px] font-mono text-[#D4AF37] bg-[#D4AF37]/10 border border-[#D4AF37]/20 px-1.5 py-0.5 rounded-full">
                             {mentionCount}x
                           </span>
 
                           <Check className="w-3.5 h-3.5 text-[#34D399]" />
+
                         </div>
+
                       )}
+
                     </button>
                   );
                 }
               )
+
             )}
+
           </div>
 
+          {/* FOOTER */}
+
           <div className="px-3 py-2.5 border-t border-[#2A2A3C] bg-[#181826]">
+
             <p className="text-[10px] text-[#77778F] leading-relaxed">
+
               <span className="text-[#D4AF37] font-semibold">
                 Pilih teks
               </span>{' '}
+
               di editor untuk menjadikannya
               mention. Jika tidak ada teks
               yang dipilih, nama karakter akan
               dimasukkan otomatis.
+
             </p>
 
             {error && (
               <div className="mt-2 px-2.5 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+
                 <p className="text-[10px] text-red-300">
                   {error}
                 </p>
+
               </div>
             )}
+
           </div>
+
         </div>
       )}
+
     </div>
   );
 };
