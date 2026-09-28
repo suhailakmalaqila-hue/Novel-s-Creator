@@ -2463,7 +2463,7 @@ export const NovelEditorView: React.FC<
             onClick={() =>
               onSelectBook('')
             }
-            className="py-3 px-6 bg-linear-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
+            className="py-3 px-6 bg-gradient-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
           >
             <BookOpen className="w-4 h-4" />
 
@@ -2590,7 +2590,7 @@ export const NovelEditorView: React.FC<
                     e.target.value
                   )
                 }
-                className="max-w-45 sm:max-w-55 px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
+                className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
               >
                 {books.map((book) => (
                   <option
@@ -2619,7 +2619,7 @@ export const NovelEditorView: React.FC<
                         e.target.value
                       )
                     }
-                    className="max-w-45 sm:max-w-55 px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
+                    className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
                   >
                     {availableChapters.map(
                       (chap) => (
@@ -2827,7 +2827,7 @@ export const NovelEditorView: React.FC<
 
             <div className="w-24 bg-[#141420] rounded-full h-2 overflow-hidden border border-[#2A2A3C]">
               <div
-                className="h-full bg-linear-to-r from-[#8A1825] to-[#D4AF37] rounded-full transition-all"
+                className="h-full bg-gradient-to-r from-[#8A1825] to-[#D4AF37] rounded-full transition-all"
                 style={{
                   width: `${Math.min(
                     100,
@@ -3028,7 +3028,7 @@ export const NovelEditorView: React.FC<
 
               {mentions.length >
                 0 && (
-                  <span className="min-w-45 h-45 px-1 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] text-[9px] font-mono flex items-center justify-center">
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] text-[9px] font-mono flex items-center justify-center">
                     {
                       mentions.length
                     }
@@ -3151,7 +3151,7 @@ export const NovelEditorView: React.FC<
 
           <div
             data-tour="editor-canvas-stage"
-            className="relative flex flex-col flex-1 min-w-0 bg-[#1A1A28] border border-[#2A2A3C] rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-2xl min-h-137.5 overflow-hidden"
+            className="relative flex flex-col flex-1 min-w-0 bg-[#1A1A28] border border-[#2A2A3C] rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-2xl min-h-[550px] overflow-hidden"
           >
             <input
               id="editor-chapter-title-input"
@@ -3181,7 +3181,7 @@ export const NovelEditorView: React.FC<
               className="font-editorial text-2xl sm:text-3xl font-bold text-[#FAF7EE] bg-transparent border-b border-[#2A2A3C] pb-3 mb-6 outline-none placeholder-[#55556C] focus:border-[#D4AF37] transition-colors shrink-0"
             />
 
-            <div className="relative flex-1 min-h-120">
+            <div className="relative flex-1 min-h-[480px]">
               {/* MENTION HIGHLIGHT LAYER
     Hanya aktif ketika panel Mentions dibuka.
     Saat panel ditutup, layer benar-benar disembunyikan.
@@ -3190,7 +3190,7 @@ export const NovelEditorView: React.FC<
                 <div
                   ref={mentionHighlightRef}
                   aria-hidden="true"
-                  className="absolute inset-0 w-full min-h-120 overflow-hidden pointer-events-none whitespace-pre-wrap wrap-break-word"
+                  className="absolute inset-0 w-full min-h-[480px] overflow-hidden pointer-events-none whitespace-pre-wrap break-words"
                   style={{
                     fontFamily:
                       fontFamily === 'serif'
@@ -3281,7 +3281,7 @@ export const NovelEditorView: React.FC<
 
                   caretColor: '#FAF7EE',
                 }}
-                className="relative z-10 w-full h-full min-h-120 bg-transparent outline-none resize-none placeholder-[#4E4E66] selection:bg-[#D4AF37]/40"
+                className="relative z-10 w-full h-full min-h-[480px] bg-transparent outline-none resize-none placeholder-[#4E4E66] selection:bg-[#D4AF37]/40"
                 autoFocus
               />
             </div>
