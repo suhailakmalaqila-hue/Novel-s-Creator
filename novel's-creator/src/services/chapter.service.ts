@@ -25,6 +25,39 @@ interface SnapshotResponse {
   data: any;
 }
 
+/**
+ * PostgreSQL is configured to store timestamp-without-time-zone values
+ * using a UTC session. Convert those values to an explicit UTC Date before
+ * formatting them in the browser.
+ */
+function parseServerTimestamp(
+  value: string | number | Date | null | undefined
+): number {
+  if (value === null || value === undefined || value === "") {
+    return 0;
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === "number") {
+    return value;
+  }
+
+  const raw = String(value);
+  const hasTimezone =
+    /(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(raw);
+
+  const date = new Date(
+    hasTimezone ? raw : `${raw}Z`
+  );
+
+  return Number.isNaN(date.getTime())
+    ? 0
+    : date.getTime();
+}
+
 export interface CreateChapterInput {
   chapterNumber?: number;
   title: string;
@@ -59,25 +92,19 @@ function mapChapter(
     chapterNumber:
       Number(chapter.chapter_number),
     title: chapter.title,
-    content:
-      chapter.content ?? "",
+    content: chapter.content ?? "",
     wordCount:
       Number(chapter.word_count),
     characterCount:
       Number(chapter.character_count),
     status: chapter.status,
-    order:
-      Number(chapter.sort_order),
-    lastSavedAt:
+    order: Number(chapter.sort_order),
+    lastSavedAt: parseServerTimestamp(
       chapter.last_saved_at
-        ? new Date(
-            chapter.last_saved_at
-          ).getTime()
-        : 0,
-    createdAt:
-      new Date(
-        chapter.created_at
-      ).getTime(),
+    ),
+    createdAt: parseServerTimestamp(
+      chapter.created_at
+    ),
   };
 }
 
@@ -86,23 +113,18 @@ function mapSnapshot(
 ): ChapterSnapshot {
   return {
     id: snapshot.id,
-    chapterId:
-      snapshot.chapter_id,
-    bookId:
-      snapshot.book_id,
+    chapterId: snapshot.chapter_id,
+    bookId: snapshot.book_id,
     chapterTitle:
       snapshot.chapter_title,
-    content:
-      snapshot.content,
+    content: snapshot.content ?? "",
     wordCount:
       Number(snapshot.word_count),
-    timestamp:
-      new Date(
-        snapshot.created_at
-      ).getTime(),
+    timestamp: parseServerTimestamp(
+      snapshot.created_at
+    ),
     reason:
-      snapshot.reason ??
-      undefined,
+      snapshot.reason ?? undefined,
   };
 }
 
@@ -114,9 +136,7 @@ export async function getChapters(
       `/books/${bookId}/chapters`
     );
 
-  return response.data.map(
-    mapChapter
-  );
+  return response.data.map(mapChapter);
 }
 
 export async function getChapter(
@@ -128,9 +148,7 @@ export async function getChapter(
       `/books/${bookId}/chapters/${chapterId}`
     );
 
-  return mapChapter(
-    response.data
-  );
+  return mapChapter(response.data);
 }
 
 export async function createChapter(
@@ -146,9 +164,7 @@ export async function createChapter(
       }
     );
 
-  return mapChapter(
-    response.data
-  );
+  return mapChapter(response.data);
 }
 
 export async function updateChapter(
@@ -165,9 +181,7 @@ export async function updateChapter(
       }
     );
 
-  return mapChapter(
-    response.data
-  );
+  return mapChapter(response.data);
 }
 
 export async function deleteChapter(
@@ -191,9 +205,7 @@ export async function getSnapshots(
       `/books/${bookId}/chapters/${chapterId}/snapshots`
     );
 
-  return response.data.map(
-    mapSnapshot
-  );
+  return response.data.map(mapSnapshot);
 }
 
 export async function createSnapshot(
@@ -210,9 +222,7 @@ export async function createSnapshot(
       }
     );
 
-  return mapSnapshot(
-    response.data
-  );
+  return mapSnapshot(response.data);
 }
 
 export async function getSnapshot(
@@ -225,7 +235,5 @@ export async function getSnapshot(
       `/books/${bookId}/chapters/${chapterId}/snapshots/${snapshotId}`
     );
 
-  return mapSnapshot(
-    response.data
-  );
+  return mapSnapshot(response.data);
 }

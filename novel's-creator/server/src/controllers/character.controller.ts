@@ -1,4 +1,5 @@
-import { Response } from "express";
+import { Request, Response } from "express";
+
 import {
   AuthRequest,
 } from "../middleware/auth.middleware";
@@ -11,6 +12,22 @@ import {
   deleteCharacter,
 } from "../services/character.service";
 
+function isInvalidCharacterInput(
+  error: unknown
+): error is Error {
+  return (
+    error instanceof Error &&
+    [
+      "FULL_NAME_REQUIRED",
+      "INVALID_CHARACTER_ROLE",
+      "INVALID_CHARACTER_STATUS",
+      "INVALID_BOOK_IDS",
+      "INVALID_BOOK_ID",
+      "INVALID_USER_ID",
+    ].includes(error.message)
+  );
+}
+
 export async function listCharacters(
   req: AuthRequest,
   res: Response
@@ -18,6 +35,7 @@ export async function listCharacters(
   try {
     if (!req.user) {
       return res.status(401).json({
+        success: false,
         message: "Unauthorized",
       });
     }
@@ -27,17 +45,30 @@ export async function listCharacters(
         ? req.query.bookId
         : undefined;
 
-    const characters = await getCharacters(
-      req.user.id,
-      bookId
-    );
+    const characters =
+      await getCharacters(
+        req.user.id,
+        bookId
+      );
 
     return res.json(characters);
   } catch (error) {
     console.error(error);
 
+    if (
+      isInvalidCharacterInput(error)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+
     return res.status(500).json({
-      message: "Gagal mengambil karakter",
+      success: false,
+      message:
+        "Gagal mengambil karakter",
     });
   }
 }
@@ -49,18 +80,22 @@ export async function getCharacter(
   try {
     if (!req.user) {
       return res.status(401).json({
+        success: false,
         message: "Unauthorized",
       });
     }
 
-    const character = await getCharacterById(
-      req.params.characterId,
-      req.user.id
-    );
+    const character =
+      await getCharacterById(
+        req.params.characterId,
+        req.user.id
+      );
 
     if (!character) {
       return res.status(404).json({
-        message: "Karakter tidak ditemukan",
+        success: false,
+        message:
+          "Karakter tidak ditemukan",
       });
     }
 
@@ -69,7 +104,9 @@ export async function getCharacter(
     console.error(error);
 
     return res.status(500).json({
-      message: "Gagal mengambil karakter",
+      success: false,
+      message:
+        "Gagal mengambil karakter",
     });
   }
 }
@@ -81,36 +118,71 @@ export async function addCharacter(
   try {
     if (!req.user) {
       return res.status(401).json({
+        success: false,
         message: "Unauthorized",
       });
     }
 
     if (
-      !req.body.fullName ||
-      typeof req.body.fullName !== "string"
+      typeof req.body?.fullName !==
+        "string" ||
+      !req.body.fullName.trim()
     ) {
       return res.status(400).json({
-        message: "fullName wajib diisi",
+        success: false,
+        message:
+          "fullName wajib diisi",
       });
     }
 
-    const character = await createCharacter(
-      req.user.id,
-      req.body
+    const character =
+      await createCharacter(
+        req.user.id,
+        req.body
+      );
+
+    return res.status(201).json(
+      character
+    );
+  } catch (error: any) {
+    console.error(
+      "Create character failed:",
+      error
     );
 
-    return res.status(201).json(character);
-  } catch (error: any) {
-    console.error(error);
+    if (
+      isInvalidCharacterInput(error)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
 
-    if (error.message === "BOOK_NOT_OWNED") {
+    if (
+      error?.message ===
+      "BOOK_NOT_OWNED"
+    ) {
       return res.status(403).json({
-        message: "Buku tidak dimiliki user",
+        success: false,
+        message:
+          "Buku tidak dimiliki user",
+      });
+    }
+
+    if (error?.code === "22P02") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Nilai character tidak valid. Periksa roleTag, status, dan UUID bookIds.",
       });
     }
 
     return res.status(500).json({
-      message: "Gagal membuat karakter",
+      success: false,
+      message:
+        "Gagal membuat karakter",
     });
   }
 }
@@ -122,34 +194,66 @@ export async function editCharacter(
   try {
     if (!req.user) {
       return res.status(401).json({
+        success: false,
         message: "Unauthorized",
       });
     }
 
-    const character = await updateCharacter(
-      req.params.characterId,
-      req.user.id,
-      req.body
-    );
+    const character =
+      await updateCharacter(
+        req.params.characterId,
+        req.user.id,
+        req.body
+      );
 
     if (!character) {
       return res.status(404).json({
-        message: "Karakter tidak ditemukan",
+        success: false,
+        message:
+          "Karakter tidak ditemukan",
       });
     }
 
     return res.json(character);
   } catch (error: any) {
-    console.error(error);
+    console.error(
+      "Update character failed:",
+      error
+    );
 
-    if (error.message === "BOOK_NOT_OWNED") {
+    if (
+      isInvalidCharacterInput(error)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+
+    if (
+      error?.message ===
+      "BOOK_NOT_OWNED"
+    ) {
       return res.status(403).json({
-        message: "Buku tidak dimiliki user",
+        success: false,
+        message:
+          "Buku tidak dimiliki user",
+      });
+    }
+
+    if (error?.code === "22P02") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Nilai character tidak valid.",
       });
     }
 
     return res.status(500).json({
-      message: "Gagal memperbarui karakter",
+      success: false,
+      message:
+        "Gagal memperbarui karakter",
     });
   }
 }
@@ -161,29 +265,37 @@ export async function removeCharacter(
   try {
     if (!req.user) {
       return res.status(401).json({
+        success: false,
         message: "Unauthorized",
       });
     }
 
-    const deleted = await deleteCharacter(
-      req.params.characterId,
-      req.user.id
-    );
+    const deleted =
+      await deleteCharacter(
+        req.params.characterId,
+        req.user.id
+      );
 
     if (!deleted) {
       return res.status(404).json({
-        message: "Karakter tidak ditemukan",
+        success: false,
+        message:
+          "Karakter tidak ditemukan",
       });
     }
 
     return res.json({
-      message: "Karakter berhasil dihapus",
+      success: true,
+      message:
+        "Karakter berhasil dihapus",
     });
   } catch (error) {
     console.error(error);
 
     return res.status(500).json({
-      message: "Gagal menghapus karakter",
+      success: false,
+      message:
+        "Gagal menghapus karakter",
     });
   }
 }

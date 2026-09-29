@@ -1,5 +1,30 @@
 import pool from "../config/database";
 
+const ROLE_TAGS = [
+  "Protagonis",
+  "Antagonis",
+  "Side",
+  "Mentor",
+  "Rival",
+  "Netral",
+] as const;
+
+const CHARACTER_STATUSES = [
+  "Hidup",
+  "Mati",
+  "Hilang",
+  "Disegel",
+  "Reinkarnasi",
+  "Lainnya",
+] as const;
+
+type RoleTag = (typeof ROLE_TAGS)[number];
+type CharacterStatus =
+  (typeof CHARACTER_STATUSES)[number];
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export interface CreateCharacterInput {
   fullName: string;
   alias?: string;
@@ -32,10 +57,92 @@ export interface UpdateCharacterInput {
   bookIds?: string[];
 }
 
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    UUID_RE.test(value)
+  );
+}
+
+function validateRoleTag(
+  value: string | undefined
+): RoleTag {
+  const role = value ?? "Netral";
+
+  if (
+    !ROLE_TAGS.includes(
+      role as RoleTag
+    )
+  ) {
+    throw new Error(
+      "INVALID_CHARACTER_ROLE"
+    );
+  }
+
+  return role as RoleTag;
+}
+
+function validateCharacterStatus(
+  value: string | undefined
+): CharacterStatus {
+  const status = value ?? "Hidup";
+
+  if (
+    !CHARACTER_STATUSES.includes(
+      status as CharacterStatus
+    )
+  ) {
+    throw new Error(
+      "INVALID_CHARACTER_STATUS"
+    );
+  }
+
+  return status as CharacterStatus;
+}
+
+function validateBookIds(
+  bookIds: string[] | undefined
+): string[] {
+  if (bookIds === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(bookIds)) {
+    throw new Error("INVALID_BOOK_IDS");
+  }
+
+  for (const bookId of bookIds) {
+    if (!isUuid(bookId)) {
+      throw new Error("INVALID_BOOK_ID");
+    }
+  }
+
+  return bookIds;
+}
+
+function validateCharacterInput(
+  input: CreateCharacterInput | UpdateCharacterInput
+) {
+  if (
+    input.fullName !== undefined &&
+    !input.fullName.trim()
+  ) {
+    throw new Error("FULL_NAME_REQUIRED");
+  }
+
+  validateRoleTag(input.roleTag);
+  validateCharacterStatus(input.status);
+  validateBookIds(input.bookIds);
+}
+
 async function verifyBookOwnership(
   bookId: string,
   userId: string
 ): Promise<boolean> {
+  if (!isUuid(bookId) || !isUuid(userId)) {
+    return false;
+  }
+
   const result = await pool.query(
     `
     SELECT 1
@@ -53,6 +160,13 @@ async function verifyCharacterOwnership(
   characterId: string,
   userId: string
 ): Promise<boolean> {
+  if (
+    !isUuid(characterId) ||
+    !isUuid(userId)
+  ) {
+    return false;
+  }
+
   const result = await pool.query(
     `
     SELECT 1
@@ -69,7 +183,7 @@ async function verifyCharacterOwnership(
 async function syncBookCharacters(
   characterId: string,
   userId: string,
-  bookIds: string[] = []
+  bookIds: string[]
 ) {
   const client = await pool.connect();
 
@@ -85,15 +199,20 @@ async function syncBookCharacters(
     );
 
     for (const bookId of bookIds) {
-      const ownership = await client.query(
-        `
-        SELECT 1
-        FROM books
-        WHERE id = $1
-          AND user_id = $2
-        `,
-        [bookId, userId]
-      );
+      if (!isUuid(bookId)) {
+        throw new Error("INVALID_BOOK_ID");
+      }
+
+      const ownership =
+        await client.query(
+          `
+          SELECT 1
+          FROM books
+          WHERE id = $1
+            AND user_id = $2
+          `,
+          [bookId, userId]
+        );
 
       if (ownership.rowCount === 0) {
         throw new Error("BOOK_NOT_OWNED");
@@ -122,13 +241,83 @@ async function syncBookCharacters(
   }
 }
 
-export async function getCharacters(userId: string, bookId?: string) {
-  const params: unknown[] = [userId];
+const characterSelect = `
+  c.id,
+  c.full_name,
+  c.alias,
+  c.age,
+  c.gender,
+  c.role_tag,
+  c.status,
+  c.avatar_url,
+  c.physical_appearance,
+  c.personality_traits,
+  c.backstory,
+  c.motivation,
+  c.world_goal,
+  c.created_at,
+  c.updated_at,
 
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', ca.id,
+          'key', ca.attribute_key,
+          'value', ca.attribute_value
+        )
+        ORDER BY ca.created_at ASC
+      )
+      FROM character_custom_attributes ca
+      WHERE ca.character_id = c.id
+    ),
+    '[]'::json
+  ) AS custom_attributes,
+
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', cr.id,
+          'targetCharacterId',
+            cr.target_character_id,
+          'relationType',
+            cr.relation_type,
+          'description',
+            cr.description
+        )
+        ORDER BY cr.created_at ASC
+      )
+      FROM character_relationships cr
+      WHERE cr.character_id = c.id
+    ),
+    '[]'::json
+  ) AS relationships,
+
+  COALESCE(
+    (
+      SELECT json_agg(bc.book_id)
+      FROM book_characters bc
+      WHERE bc.character_id = c.id
+    ),
+    '[]'::json
+  ) AS book_ids
+`;
+
+export async function getCharacters(
+  userId: string,
+  bookId?: string
+) {
+  const params: unknown[] = [userId];
   let bookCondition = "";
 
   if (bookId) {
+    if (!isUuid(bookId)) {
+      throw new Error("INVALID_BOOK_ID");
+    }
+
     params.push(bookId);
+
     bookCondition = `
       AND EXISTS (
         SELECT 1
@@ -142,69 +331,10 @@ export async function getCharacters(userId: string, bookId?: string) {
   const result = await pool.query(
     `
     SELECT
-      c.id,
-      c.full_name,
-      c.alias,
-      c.age,
-      c.gender,
-      c.role_tag,
-      c.status,
-      c.avatar_url,
-      c.physical_appearance,
-      c.personality_traits,
-      c.backstory,
-      c.motivation,
-      c.world_goal,
-      c.created_at,
-      c.updated_at,
-
-      COALESCE(
-        (
-          SELECT json_agg(
-            json_build_object(
-              'id', ca.id,
-              'key', ca.attribute_key,
-              'value', ca.attribute_value
-            )
-            ORDER BY ca.created_at ASC
-          )
-          FROM character_custom_attributes ca
-          WHERE ca.character_id = c.id
-        ),
-        '[]'::json
-      ) AS custom_attributes,
-
-      COALESCE(
-        (
-          SELECT json_agg(
-            json_build_object(
-              'id', cr.id,
-              'targetCharacterId', cr.target_character_id,
-              'relationType', cr.relation_type,
-              'description', cr.description
-            )
-            ORDER BY cr.created_at ASC
-          )
-          FROM character_relationships cr
-          WHERE cr.character_id = c.id
-        ),
-        '[]'::json
-      ) AS relationships,
-
-      COALESCE(
-        (
-          SELECT json_agg(bc.book_id)
-          FROM book_characters bc
-          WHERE bc.character_id = c.id
-        ),
-        '[]'::json
-      ) AS book_ids
-
+      ${characterSelect}
     FROM characters c
-
     WHERE c.user_id = $1
     ${bookCondition}
-
     ORDER BY c.created_at DESC
     `,
     params
@@ -217,67 +347,17 @@ export async function getCharacterById(
   characterId: string,
   userId: string
 ) {
+  if (
+    !isUuid(characterId) ||
+    !isUuid(userId)
+  ) {
+    return null;
+  }
+
   const result = await pool.query(
     `
     SELECT
-      c.id,
-      c.full_name,
-      c.alias,
-      c.age,
-      c.gender,
-      c.role_tag,
-      c.status,
-      c.avatar_url,
-      c.physical_appearance,
-      c.personality_traits,
-      c.backstory,
-      c.motivation,
-      c.world_goal,
-      c.created_at,
-      c.updated_at,
-
-      COALESCE(
-        (
-          SELECT json_agg(
-            json_build_object(
-              'id', ca.id,
-              'key', ca.attribute_key,
-              'value', ca.attribute_value
-            )
-            ORDER BY ca.created_at ASC
-          )
-          FROM character_custom_attributes ca
-          WHERE ca.character_id = c.id
-        ),
-        '[]'::json
-      ) AS custom_attributes,
-
-      COALESCE(
-        (
-          SELECT json_agg(
-            json_build_object(
-              'id', cr.id,
-              'targetCharacterId', cr.target_character_id,
-              'relationType', cr.relation_type,
-              'description', cr.description
-            )
-            ORDER BY cr.created_at ASC
-          )
-          FROM character_relationships cr
-          WHERE cr.character_id = c.id
-        ),
-        '[]'::json
-      ) AS relationships,
-
-      COALESCE(
-        (
-          SELECT json_agg(bc.book_id)
-          FROM book_characters bc
-          WHERE bc.character_id = c.id
-        ),
-        '[]'::json
-      ) AS book_ids
-
+      ${characterSelect}
     FROM characters c
     WHERE c.id = $1
       AND c.user_id = $2
@@ -292,74 +372,90 @@ export async function createCharacter(
   userId: string,
   input: CreateCharacterInput
 ) {
+  if (!isUuid(userId)) {
+    throw new Error("INVALID_USER_ID");
+  }
+
+  validateCharacterInput(input);
+
+  const roleTag =
+    validateRoleTag(input.roleTag);
+  const status =
+    validateCharacterStatus(input.status);
+  const bookIds =
+    validateBookIds(input.bookIds);
+
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    const characterResult = await client.query(
-      `
-      INSERT INTO characters (
-        user_id,
-        full_name,
-        alias,
-        age,
-        gender,
-        role_tag,
-        status,
-        avatar_url,
-        physical_appearance,
-        personality_traits,
-        backstory,
-        motivation,
-        world_goal
-      )
-      VALUES (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6::character_role_tag,
-        $7::character_status,
-        $8,
-        $9,
-        $10,
-        $11,
-        $12,
-        $13
-      )
-      RETURNING id
-      `,
-      [
-        userId,
-        input.fullName.trim(),
-        input.alias ?? "",
-        input.age ?? "",
-        input.gender ?? "",
-        input.roleTag ?? "Netral",
-        input.status ?? "Hidup",
-        input.avatarUrl ?? "",
-        input.physicalAppearance ?? "",
-        input.personalityTraits ?? "",
-        input.backstory ?? "",
-        input.motivation ?? "",
-        input.worldGoal ?? "",
-      ]
-    );
-
-    const characterId = characterResult.rows[0].id;
-
-    for (const bookId of input.bookIds ?? []) {
-      const ownership = await client.query(
+    const characterResult =
+      await client.query(
         `
-        SELECT 1
-        FROM books
-        WHERE id = $1
-          AND user_id = $2
+        INSERT INTO characters (
+          user_id,
+          full_name,
+          alias,
+          age,
+          gender,
+          role_tag,
+          status,
+          avatar_url,
+          physical_appearance,
+          personality_traits,
+          backstory,
+          motivation,
+          world_goal
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6::character_role_tag,
+          $7::character_status,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13
+        )
+        RETURNING id
         `,
-        [bookId, userId]
+        [
+          userId,
+          input.fullName.trim(),
+          input.alias ?? "",
+          input.age ?? "",
+          input.gender ?? "",
+          roleTag,
+          status,
+          input.avatarUrl ?? "",
+          input.physicalAppearance ?? "",
+          input.personalityTraits ?? "",
+          input.backstory ?? "",
+          input.motivation ?? "",
+          input.worldGoal ?? "",
+        ]
       );
+
+    const characterId =
+      characterResult.rows[0].id;
+
+    for (const bookId of bookIds) {
+      const ownership =
+        await client.query(
+          `
+          SELECT 1
+          FROM books
+          WHERE id = $1
+            AND user_id = $2
+          `,
+          [bookId, userId]
+        );
 
       if (ownership.rowCount === 0) {
         throw new Error("BOOK_NOT_OWNED");
@@ -381,7 +477,10 @@ export async function createCharacter(
 
     await client.query("COMMIT");
 
-    return getCharacterById(characterId, userId);
+    return getCharacterById(
+      characterId,
+      userId
+    );
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -395,10 +494,20 @@ export async function updateCharacter(
   userId: string,
   input: UpdateCharacterInput
 ) {
-  const exists = await verifyCharacterOwnership(
-    characterId,
-    userId
-  );
+  if (
+    !isUuid(characterId) ||
+    !isUuid(userId)
+  ) {
+    return null;
+  }
+
+  validateCharacterInput(input);
+
+  const exists =
+    await verifyCharacterOwnership(
+      characterId,
+      userId
+    );
 
   if (!exists) {
     return null;
@@ -408,13 +517,21 @@ export async function updateCharacter(
   const values: unknown[] = [];
   let index = 1;
 
-  const addField = (column: string, value: unknown) => {
-    fields.push(`${column} = $${index++}`);
+  const addField = (
+    column: string,
+    value: unknown
+  ) => {
+    fields.push(
+      `${column} = $${index++}`
+    );
     values.push(value);
   };
 
   if (input.fullName !== undefined) {
-    addField("full_name", input.fullName.trim());
+    addField(
+      "full_name",
+      input.fullName.trim()
+    );
   }
 
   if (input.alias !== undefined) {
@@ -430,41 +547,75 @@ export async function updateCharacter(
   }
 
   if (input.roleTag !== undefined) {
-    fields.push(`role_tag = $${index++}::character_role_tag`);
-    values.push(input.roleTag);
+    fields.push(
+      `role_tag = $${index++}::character_role_tag`
+    );
+    values.push(
+      validateRoleTag(input.roleTag)
+    );
   }
 
   if (input.status !== undefined) {
-    fields.push(`status = $${index++}::character_status`);
-    values.push(input.status);
+    fields.push(
+      `status = $${index++}::character_status`
+    );
+    values.push(
+      validateCharacterStatus(
+        input.status
+      )
+    );
   }
 
   if (input.avatarUrl !== undefined) {
-    addField("avatar_url", input.avatarUrl);
+    addField(
+      "avatar_url",
+      input.avatarUrl
+    );
   }
 
-  if (input.physicalAppearance !== undefined) {
-    addField("physical_appearance", input.physicalAppearance);
+  if (
+    input.physicalAppearance !== undefined
+  ) {
+    addField(
+      "physical_appearance",
+      input.physicalAppearance
+    );
   }
 
-  if (input.personalityTraits !== undefined) {
-    addField("personality_traits", input.personalityTraits);
+  if (
+    input.personalityTraits !== undefined
+  ) {
+    addField(
+      "personality_traits",
+      input.personalityTraits
+    );
   }
 
   if (input.backstory !== undefined) {
-    addField("backstory", input.backstory);
+    addField(
+      "backstory",
+      input.backstory
+    );
   }
 
   if (input.motivation !== undefined) {
-    addField("motivation", input.motivation);
+    addField(
+      "motivation",
+      input.motivation
+    );
   }
 
   if (input.worldGoal !== undefined) {
-    addField("world_goal", input.worldGoal);
+    addField(
+      "world_goal",
+      input.worldGoal
+    );
   }
 
   if (fields.length > 0) {
-    fields.push("updated_at = CURRENT_TIMESTAMP");
+    fields.push(
+      "updated_at = CURRENT_TIMESTAMP"
+    );
 
     values.push(characterId);
     values.push(userId);
@@ -484,17 +635,27 @@ export async function updateCharacter(
     await syncBookCharacters(
       characterId,
       userId,
-      input.bookIds
+      validateBookIds(input.bookIds)
     );
   }
 
-  return getCharacterById(characterId, userId);
+  return getCharacterById(
+    characterId,
+    userId
+  );
 }
 
 export async function deleteCharacter(
   characterId: string,
   userId: string
 ) {
+  if (
+    !isUuid(characterId) ||
+    !isUuid(userId)
+  ) {
+    return false;
+  }
+
   const result = await pool.query(
     `
     DELETE FROM characters
@@ -507,3 +668,8 @@ export async function deleteCharacter(
 
   return result.rowCount === 1;
 }
+
+export {
+  ROLE_TAGS,
+  CHARACTER_STATUSES,
+};
