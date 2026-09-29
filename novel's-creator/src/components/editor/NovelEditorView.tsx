@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 
+
 import {
   BookOpen,
   Bold,
@@ -223,6 +224,254 @@ function MarkdownPreview({
       className="prose prose-invert max-w-none text-[#E6E2D8] min-h-[30rem] whitespace-normal"
       dangerouslySetInnerHTML={{ __html: html }}
     />
+  );
+}
+
+function escapeRtfText(value: string): string {
+  let output = "";
+
+  for (const char of value) {
+    if (char === "\\") {
+      output += "\\\\";
+      continue;
+    }
+
+    if (char === "{") {
+      output += "\\{";
+      continue;
+    }
+
+    if (char === "}") {
+      output += "\\}";
+      continue;
+    }
+
+    const code = char.codePointAt(0) ?? 0;
+
+    if (code > 127) {
+      const signed =
+        code > 32767 ? code - 65536 : code;
+      output += `\\u${signed}?`;
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
+function markdownInlineToRtf(
+  source: string,
+  inherited = {
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+  }
+): string {
+  const runs: string[] = [];
+  let cursor = 0;
+  const markers = [
+    "**",
+    "~~",
+    "<u>",
+    "*",
+  ] as const;
+
+  const appendPlain = (value: string) => {
+    if (!value) return;
+
+    const commands = [
+      inherited.bold ? "\\b" : "\\b0",
+      inherited.italic ? "\\i" : "\\i0",
+      inherited.underline ? "\\ul" : "\\ul0",
+      inherited.strike ? "\\strike" : "\\strike0",
+    ].join("");
+
+    runs.push(
+      `${commands} ${escapeRtfText(value)}\\plain `
+    );
+  };
+
+  while (cursor < source.length) {
+    let nextIndex = -1;
+    let nextMarker:
+      | (typeof markers)[number]
+      | null = null;
+
+    for (const marker of markers) {
+      const index = source.indexOf(
+        marker,
+        cursor
+      );
+
+      if (
+        index !== -1 &&
+        (nextIndex === -1 || index < nextIndex)
+      ) {
+        nextIndex = index;
+        nextMarker = marker;
+      }
+    }
+
+    if (nextIndex === -1 || !nextMarker) {
+      appendPlain(source.slice(cursor));
+      break;
+    }
+
+    appendPlain(
+      source.slice(cursor, nextIndex)
+    );
+
+    if (nextMarker === "<u>") {
+      const closeIndex = source.indexOf(
+        "</u>",
+        nextIndex + 3
+      );
+
+      if (closeIndex === -1) {
+        appendPlain(source.slice(nextIndex));
+        break;
+      }
+
+      runs.push(
+        markdownInlineToRtf(
+          source.slice(
+            nextIndex + 3,
+            closeIndex
+          ),
+          {
+            ...inherited,
+            underline: true,
+          }
+        )
+      );
+
+      cursor = closeIndex + 4;
+      continue;
+    }
+
+    const closeIndex = source.indexOf(
+      nextMarker,
+      nextIndex + nextMarker.length
+    );
+
+    if (closeIndex === -1) {
+      appendPlain(source.slice(nextIndex));
+      break;
+    }
+
+    const inner = source.slice(
+      nextIndex + nextMarker.length,
+      closeIndex
+    );
+
+    if (!inner) {
+      cursor = closeIndex + nextMarker.length;
+      continue;
+    }
+
+    runs.push(
+      markdownInlineToRtf(
+        inner,
+        {
+          ...inherited,
+          bold:
+            inherited.bold ||
+            nextMarker === "**",
+          italic:
+            inherited.italic ||
+            nextMarker === "*",
+          strike:
+            inherited.strike ||
+            nextMarker === "~~",
+        }
+      )
+    );
+
+    cursor = closeIndex + nextMarker.length;
+  }
+
+  return runs.join("");
+}
+
+function markdownToRtf(content: string): string {
+  const lines = content.split("\n");
+  const output: string[] = [];
+
+  for (const line of lines) {
+    if (/^\s*\*\s*\*\s*\*\s*$/.test(line)) {
+      output.push(
+        "\\qc\\b * * *\\b0\\par\\ql"
+      );
+      continue;
+    }
+
+    if (/^###\s+/.test(line)) {
+      output.push(
+        `\\sb240\\sa120\\fs28\\b ${markdownInlineToRtf(
+          line.replace(/^###\s+/, "")
+        )}\\b0\\fs24\\par`
+      );
+      continue;
+    }
+
+    if (/^##\s+/.test(line)) {
+      output.push(
+        `\\sb240\\sa120\\fs32\\b ${markdownInlineToRtf(
+          line.replace(/^##\s+/, "")
+        )}\\b0\\fs24\\par`
+      );
+      continue;
+    }
+
+    if (/^#\s+/.test(line)) {
+      output.push(
+        `\\sb300\\sa160\\fs36\\b ${markdownInlineToRtf(
+          line.replace(/^#\s+/, "")
+        )}\\b0\\fs24\\par`
+      );
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      output.push(
+        `\\li720\\i ${markdownInlineToRtf(
+          line.replace(/^>\s?/, ""),
+          {
+            bold: false,
+            italic: true,
+            underline: false,
+            strike: false,
+          }
+        )}\\i0\\li0\\par`
+      );
+      continue;
+    }
+
+    output.push(
+      `\\sa120 ${markdownInlineToRtf(line)}\\par`
+    );
+  }
+
+  return [
+    "{\\rtf1\\ansi\\deff0",
+    "{\\fonttbl{\\f0 Times New Roman;}}",
+    "\\viewkind4\\uc1\\f0\\fs24",
+    output.join(""),
+    "}",
+  ].join("");
+}
+
+function sanitizeDownloadFileName(
+  value: string
+): string {
+  return (
+    value
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, " ") || "chapter"
   );
 }
 
@@ -1259,41 +1508,40 @@ export const NovelEditorView: React.FC<
       [flushPendingSave, performSave]
     );
 
-  const handleExportText = useCallback(
-    (format: "txt" | "md") => {
-      if (!activeChapter) {
-        return;
-      }
+  const handleExportRtf = useCallback(() => {
+    if (!activeChapter) {
+      return;
+    }
 
-      const blob = new Blob(
-        [
-          format === "md"
-            ? `# ${chapterTitle}\n\n${content}`
-            : `${chapterTitle}\n\n${content}`,
-        ],
-        {
-          type:
-            "text/plain;charset=utf-8",
-        }
-      );
+    const rtf = [
+      `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\viewkind4\\uc1\\f0\\fs24`,
+      `\\qc\\fs36\\b ${escapeRtfText(
+        chapterTitle ||
+          `Bab ${activeChapter.chapterNumber}`
+      )}\\b0\\fs24\\par\\ql`,
+      markdownToRtf(content),
+      "}",
+    ].join("");
 
-      const url =
-        URL.createObjectURL(blob);
+    const blob = new Blob([rtf], {
+      type: "application/rtf;charset=utf-8",
+    });
 
-      const anchor =
-        document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const anchor =
+      window.document.createElement("a");
 
-      anchor.href = url;
-      anchor.download =
-        `${chapterTitle || "chapter"}.${
-          format === "md" ? "md" : "txt"
-        }`;
+    anchor.href = url;
+    anchor.download = `${sanitizeDownloadFileName(
+      chapterTitle ||
+        `Bab ${activeChapter.chapterNumber}`
+    )}.rtf`;
+    anchor.click();
 
-      anchor.click();
+    window.setTimeout(() => {
       URL.revokeObjectURL(url);
-    },
-    [activeChapter, chapterTitle, content]
-  );
+    }, 1000);
+  }, [activeChapter, chapterTitle, content]);
 
   const currentWordCount =
     countWords(content);
@@ -1784,11 +2032,10 @@ export const NovelEditorView: React.FC<
 
           <button
             type="button"
-            onClick={() =>
-              handleExportText("md")
-            }
+            onClick={handleExportRtf}
             className="p-1.5 text-[#B0B0C4] hover:text-[#FAF7EE]"
-            title="Unduh Markdown"
+            title="Unduh chapter dengan formatting (RTF)"
+            aria-label="Unduh chapter dengan formatting (RTF)"
           >
             <Download className="w-4 h-4" />
           </button>
