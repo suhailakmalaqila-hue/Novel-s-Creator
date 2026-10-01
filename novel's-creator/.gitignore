@@ -1,13 +1,17 @@
+# Dependencies
 node_modules/
-**/node_modules/
 
+# Environment Variables
 .env
 .env.*
 !.env.example
+
+# Build Outputs
 dist/
 
+# Source Files / Specific Files (Opsional)
 Register.tsx
 
-project.zip
-
-backup.before-repair.sql
+# Archives & Temporary Files
+*.zip
+*.sql
