@@ -1,712 +1,2146 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
-import { Book, Chapter, ChapterSnapshot, SaveStatus, UserAuthorProfile } from '../../types';
-import { countWords, countCharacters } from '../../lib/storage';
-import { useChapters } from '../../contexts/ChapterContext';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+
 import {
-  Save,
+  BookOpen,
   Bold,
-  Italic,
-  Underline,
-  Strikethrough,
+  Clock,
+  Download,
+  FileText,
   Heading1,
   Heading2,
-  Quote,
+  History,
+  Italic,
   Maximize2,
   Minimize2,
-  History,
-  Download,
-  BookOpen,
-  FileText,
-  Clock,
+  PanelRight,
+  Quote,
   RotateCcw,
+  Save,
+  Strikethrough,
+  Underline,
   X,
-} from 'lucide-react';
+} from "lucide-react";
+
+import type {
+  Book,
+  Chapter,
+  ChapterSnapshot,
+  CharacterMention,
+  CharacterWiki,
+  SaveStatus,
+  UserAuthorProfile,
+} from "../../types";
+
+import { useChapters } from "../../contexts/ChapterContext";
+import { useCharacters } from "../../contexts/CharacterContext";
+import {
+  countCharacters,
+  countWords,
+} from "../../lib/storage";
+
+import CharacterMentionPicker from "./CharacterMentionPicker";
+import CharacterMentionPanel from "./CharacterMentionPanel";
 
 interface NovelEditorViewProps {
   books: Book[];
   chapters: Chapter[];
+  chaptersByBook: Record<string, Chapter[]>;
   initialBookId?: string | null;
   initialChapterId?: string | null;
   userProfile: UserAuthorProfile | null;
-  onSaveChapter: (chapter: Chapter) => void | Promise<void>;
+  onSaveChapter: (
+    chapter: Chapter
+  ) => void | Promise<void>;
   onSelectBook: (bookId: string) => void;
 }
 
-export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
+/**
+ * Database timestamps in this project are stored without a timezone.
+ * database.ts pins the PostgreSQL session to UTC, so timestamps without
+ * an explicit offset are interpreted as UTC here and displayed in the
+ * user's browser timezone.
+ */
+function parseServerDate(
+  value: string | number | Date | null | undefined
+): Date | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const raw = String(value);
+  const hasTimezone =
+    /(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(raw);
+
+  const date = new Date(
+    hasTimezone ? raw : `${raw}Z`
+  );
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatUserDateTime(
+  value: string | number | Date | null | undefined,
+  includeSeconds = true
+): string {
+  const date = parseServerDate(value);
+
+  if (!date) {
+    return "—";
+  }
+
+  const timeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: includeSeconds ? "medium" : "short",
+    timeZone,
+  }).format(date);
+}
+
+function getUserTimeZone(): string {
+  return (
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    "local"
+  );
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+/**
+ * Small, dependency-free Markdown renderer for the editor preview.
+ *
+ * The editor itself keeps Markdown/plain text in the database. The preview
+ * is sanitized by escaping HTML before applying only the formatting syntax
+ * that this toolbar generates.
+ */
+function markdownLineToHtml(line: string): string {
+  const escaped = escapeHtml(line);
+
+  if (/^\s*\*\s*\*\s*\*\s*$/.test(line)) {
+    return '<div class="my-5 text-center tracking-[0.35em] text-[#D4AF37]">* * *</div>';
+  }
+
+  let html = escaped;
+
+  if (/^###\s+/.test(line)) {
+    html = `<h3 class="font-editorial text-lg font-bold text-[#FAF7EE] mb-2">${html.replace(
+      /^###\s+/,
+      ""
+    )}</h3>`;
+    return html;
+  }
+
+  if (/^##\s+/.test(line)) {
+    html = `<h2 class="font-editorial text-xl font-bold text-[#FAF7EE] mb-2">${html.replace(
+      /^##\s+/,
+      ""
+    )}</h2>`;
+    return html;
+  }
+
+  if (/^#\s+/.test(line)) {
+    html = `<h1 class="font-editorial text-2xl font-bold text-[#FAF7EE] mb-3">${html.replace(
+      /^#\s+/,
+      ""
+    )}</h1>`;
+    return html;
+  }
+
+  if (/^>\s?/.test(line)) {
+    html = `<blockquote class="border-l-2 border-[#D4AF37] pl-4 italic text-[#C8C8DC] my-2">${html.replace(
+      /^&gt;\s?/,
+      ""
+    )}</blockquote>`;
+    return html;
+  }
+
+  // The toolbar uses <u> explicitly because standard Markdown has no
+  // underline syntax. Since the source is escaped first, only literal
+  // <u>...</u> generated by this application can become HTML again.
+  html = html.replace(
+    /&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g,
+    "<u>$1</u>"
+  );
+
+  html = html.replace(
+    /\*\*([^*]+?)\*\*/g,
+    "<strong>$1</strong>"
+  );
+
+  html = html.replace(
+    /~~([^~]+?)~~/g,
+    "<del>$1</del>"
+  );
+
+  // Single * is italic only when it is not part of **.
+  html = html.replace(
+    /(^|[^*])\*([^*]+?)\*(?!\*)/g,
+    "$1<em>$2</em>"
+  );
+
+  return `<p class="mb-2 leading-relaxed">${html || "&nbsp;"}</p>`;
+}
+
+function MarkdownPreview({
+  content,
+}: {
+  content: string;
+}) {
+  const html = useMemo(
+    () =>
+      content
+        .split("\n")
+        .map(markdownLineToHtml)
+        .join(""),
+    [content]
+  );
+
+  return (
+    <div
+      className="prose prose-invert max-w-none text-[#E6E2D8] min-h-[30rem] whitespace-normal"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+function escapeRtfText(value: string): string {
+  let output = "";
+
+  for (const char of value) {
+    if (char === "\\") {
+      output += "\\\\";
+      continue;
+    }
+
+    if (char === "{") {
+      output += "\\{";
+      continue;
+    }
+
+    if (char === "}") {
+      output += "\\}";
+      continue;
+    }
+
+    const code = char.codePointAt(0) ?? 0;
+
+    if (code > 127) {
+      const signed =
+        code > 32767 ? code - 65536 : code;
+      output += `\\u${signed}?`;
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
+function markdownInlineToRtf(
+  source: string,
+  inherited = {
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+  }
+): string {
+  const runs: string[] = [];
+  let cursor = 0;
+  const markers = [
+    "**",
+    "~~",
+    "<u>",
+    "*",
+  ] as const;
+
+  const appendPlain = (value: string) => {
+    if (!value) return;
+
+    const commands = [
+      inherited.bold ? "\\b" : "\\b0",
+      inherited.italic ? "\\i" : "\\i0",
+      inherited.underline ? "\\ul" : "\\ul0",
+      inherited.strike ? "\\strike" : "\\strike0",
+    ].join("");
+
+    runs.push(
+      `${commands} ${escapeRtfText(value)}\\plain `
+    );
+  };
+
+  while (cursor < source.length) {
+    let nextIndex = -1;
+    let nextMarker:
+      | (typeof markers)[number]
+      | null = null;
+
+    for (const marker of markers) {
+      const index = source.indexOf(
+        marker,
+        cursor
+      );
+
+      if (
+        index !== -1 &&
+        (nextIndex === -1 || index < nextIndex)
+      ) {
+        nextIndex = index;
+        nextMarker = marker;
+      }
+    }
+
+    if (nextIndex === -1 || !nextMarker) {
+      appendPlain(source.slice(cursor));
+      break;
+    }
+
+    appendPlain(
+      source.slice(cursor, nextIndex)
+    );
+
+    if (nextMarker === "<u>") {
+      const closeIndex = source.indexOf(
+        "</u>",
+        nextIndex + 3
+      );
+
+      if (closeIndex === -1) {
+        appendPlain(source.slice(nextIndex));
+        break;
+      }
+
+      runs.push(
+        markdownInlineToRtf(
+          source.slice(
+            nextIndex + 3,
+            closeIndex
+          ),
+          {
+            ...inherited,
+            underline: true,
+          }
+        )
+      );
+
+      cursor = closeIndex + 4;
+      continue;
+    }
+
+    const closeIndex = source.indexOf(
+      nextMarker,
+      nextIndex + nextMarker.length
+    );
+
+    if (closeIndex === -1) {
+      appendPlain(source.slice(nextIndex));
+      break;
+    }
+
+    const inner = source.slice(
+      nextIndex + nextMarker.length,
+      closeIndex
+    );
+
+    if (!inner) {
+      cursor = closeIndex + nextMarker.length;
+      continue;
+    }
+
+    runs.push(
+      markdownInlineToRtf(
+        inner,
+        {
+          ...inherited,
+          bold:
+            inherited.bold ||
+            nextMarker === "**",
+          italic:
+            inherited.italic ||
+            nextMarker === "*",
+          strike:
+            inherited.strike ||
+            nextMarker === "~~",
+        }
+      )
+    );
+
+    cursor = closeIndex + nextMarker.length;
+  }
+
+  return runs.join("");
+}
+
+function markdownToRtf(content: string): string {
+  const lines = content.split("\n");
+  const output: string[] = [];
+
+  for (const line of lines) {
+    if (/^\s*\*\s*\*\s*\*\s*$/.test(line)) {
+      output.push(
+        "\\qc\\b * * *\\b0\\par\\ql"
+      );
+      continue;
+    }
+
+    if (/^###\s+/.test(line)) {
+      output.push(
+        `\\sb240\\sa120\\fs28\\b ${markdownInlineToRtf(
+          line.replace(/^###\s+/, "")
+        )}\\b0\\fs24\\par`
+      );
+      continue;
+    }
+
+    if (/^##\s+/.test(line)) {
+      output.push(
+        `\\sb240\\sa120\\fs32\\b ${markdownInlineToRtf(
+          line.replace(/^##\s+/, "")
+        )}\\b0\\fs24\\par`
+      );
+      continue;
+    }
+
+    if (/^#\s+/.test(line)) {
+      output.push(
+        `\\sb300\\sa160\\fs36\\b ${markdownInlineToRtf(
+          line.replace(/^#\s+/, "")
+        )}\\b0\\fs24\\par`
+      );
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      output.push(
+        `\\li720\\i ${markdownInlineToRtf(
+          line.replace(/^>\s?/, ""),
+          {
+            bold: false,
+            italic: true,
+            underline: false,
+            strike: false,
+          }
+        )}\\i0\\li0\\par`
+      );
+      continue;
+    }
+
+    output.push(
+      `\\sa120 ${markdownInlineToRtf(line)}\\par`
+    );
+  }
+
+  return [
+    "{\\rtf1\\ansi\\deff0",
+    "{\\fonttbl{\\f0 Times New Roman;}}",
+    "\\viewkind4\\uc1\\f0\\fs24",
+    output.join(""),
+    "}",
+  ].join("");
+}
+
+function sanitizeDownloadFileName(
+  value: string
+): string {
+  return (
+    value
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, " ") || "chapter"
+  );
+}
+
+export const NovelEditorView: React.FC<
+  NovelEditorViewProps
+> = ({
   books,
   chapters,
+  chaptersByBook,
   initialBookId,
   initialChapterId,
   userProfile,
   onSaveChapter,
   onSelectBook,
 }) => {
-  const { snapshots, refreshSnapshots, addSnapshot } = useChapters();
+  const {
+    loadingByBook,
+    loadedBooks,
+    snapshotsByChapter,
+    snapshotsLoadingByChapter,
+    refreshChapters,
+    refreshSnapshots,
+    addSnapshot,
+  } = useChapters();
 
-  // Selected Book & Chapter State
-  const [selectedBookId, setSelectedBookId] = useState<string>(
-    () => initialBookId || (books.length > 0 ? books[0].id : '')
-  );
+  const {
+    characters,
+    mentions,
+    refreshCharacters,
+    refreshMentions,
+    addMention,
+    removeMention,
+  } = useCharacters();
+
+  const resolvedInitialBookId = useMemo(() => {
+    if (
+      initialBookId &&
+      books.some((book) => book.id === initialBookId)
+    ) {
+      return initialBookId;
+    }
+
+    return books[0]?.id || "";
+  }, [initialBookId, books]);
+
+  const [selectedBookId, setSelectedBookId] =
+    useState(resolvedInitialBookId);
+
+  useEffect(() => {
+    if (!resolvedInitialBookId) {
+      setSelectedBookId("");
+      return;
+    }
+
+    setSelectedBookId(resolvedInitialBookId);
+  }, [resolvedInitialBookId]);
 
   const availableChapters = useMemo(
-    () => chapters.filter((c) => c.bookId === selectedBookId),
-    [chapters, selectedBookId]
+    () =>
+      [...(chaptersByBook[selectedBookId] ?? [])].sort(
+        (a, b) => a.order - b.order
+      ),
+    [chaptersByBook, selectedBookId]
   );
 
-  const [selectedChapterId, setSelectedChapterId] = useState<string>(
-    () => initialChapterId || (availableChapters.length > 0 ? availableChapters[0].id : '')
+  const resolvedInitialChapterId = useMemo(() => {
+    if (
+      initialChapterId &&
+      availableChapters.some(
+        (chapter) => chapter.id === initialChapterId
+      )
+    ) {
+      return initialChapterId;
+    }
+
+    return availableChapters[0]?.id || "";
+  }, [initialChapterId, availableChapters]);
+
+  const [selectedChapterId, setSelectedChapterId] =
+    useState(resolvedInitialChapterId);
+
+  useEffect(() => {
+    setSelectedChapterId((current) => {
+      if (
+        current &&
+        availableChapters.some(
+          (chapter) => chapter.id === current
+        )
+      ) {
+        return current;
+      }
+
+      return resolvedInitialChapterId;
+    });
+  }, [availableChapters, resolvedInitialChapterId]);
+
+  const activeChapter = useMemo(() => {
+    if (!selectedBookId || !selectedChapterId) {
+      return null;
+    }
+
+    return (
+      chaptersByBook[selectedBookId]?.find(
+        (chapter) => chapter.id === selectedChapterId
+      ) ?? null
+    );
+  }, [
+    chaptersByBook,
+    selectedBookId,
+    selectedChapterId,
+  ]);
+
+  const snapshotKey = activeChapter
+    ? `${activeChapter.bookId}:${activeChapter.id}`
+    : "";
+
+  const activeSnapshots =
+    snapshotsByChapter[snapshotKey] ?? [];
+
+  const activeSnapshotsLoading =
+    Boolean(
+      snapshotsLoadingByChapter[snapshotKey]
+    );
+
+  const [content, setContent] = useState(
+    activeChapter?.content ?? ""
   );
-
-  const activeChapter = useMemo(
-    () => chapters.find((c) => c.id === selectedChapterId) || null,
-    [chapters, selectedChapterId]
+  const [chapterTitle, setChapterTitle] = useState(
+    activeChapter?.title ?? ""
   );
+  const [saveStatus, setSaveStatus] =
+    useState<SaveStatus>("saved");
+  const [lastSavedTime, setLastSavedTime] =
+    useState("Tersimpan");
+  const [isFocusMode, setIsFocusMode] =
+    useState(false);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] =
+    useState(false);
+  const [isMentionPanelOpen, setIsMentionPanelOpen] =
+    useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] =
+    useState(false);
+  const [fontFamily, setFontFamily] =
+    useState<"serif" | "sans" | "mono">("serif");
+  const [fontSize, setFontSize] = useState(18);
+  const [lineSpacing, setLineSpacing] = useState(1.8);
+  const [mentionError, setMentionError] =
+    useState<string | null>(null);
+  const [mentionOperationLoading, setMentionOperationLoading] =
+    useState(false);
 
-  const [content, setContent] = useState(activeChapter?.content || '');
-  const [chapterTitle, setChapterTitle] = useState(activeChapter?.title || '');
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
-  const [lastSavedTime, setLastSavedTime] = useState<string>('Tersimpan');
-
-  const [isFocusMode, setIsFocusMode] = useState(false);
-  const [fontFamily, setFontFamily] = useState<'serif' | 'sans' | 'mono'>('serif');
-  const [fontSize, setFontSize] = useState<number>(18);
-  const [lineSpacing] = useState<number>(1.8);
-  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
-
-  // Refs untuk mencegah Stale Closure saat Auto-Save & Unmount Flush
+  const textareaRef =
+    useRef<HTMLTextAreaElement>(null);
+  const autoSaveTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentRef = useRef(content);
-  const chapterTitleRef = useRef(chapterTitle);
+  const titleRef = useRef(chapterTitle);
   const activeChapterRef = useRef(activeChapter);
   const saveStatusRef = useRef(saveStatus);
+  const saveInFlightRef =
+    useRef<Promise<void> | null>(null);
+  const saveOperationRef = useRef(0);
+  const previousContentRef =
+    useRef(content);
+  const transitionRequestRef = useRef(0);
 
   useEffect(() => {
     contentRef.current = content;
-    chapterTitleRef.current = chapterTitle;
+    titleRef.current = chapterTitle;
     activeChapterRef.current = activeChapter;
     saveStatusRef.current = saveStatus;
-  }, [content, chapterTitle, activeChapter, saveStatus]);
+  }, [
+    content,
+    chapterTitle,
+    activeChapter,
+    saveStatus,
+  ]);
 
-  // Eksekusi Simpan (Dioptimalkan dengan Ref)
   const performSave = useCallback(
-    async (manual = false, reason = 'Auto-save draft') => {
-      const targetChapter = activeChapterRef.current;
-      if (!targetChapter) return;
+    async (
+      manual = false,
+      reason = "Auto-save draft",
+      overrides?: {
+        content?: string;
+        title?: string;
+      }
+    ) => {
+      const targetChapter =
+        activeChapterRef.current;
 
-      setSaveStatus('saving');
-      const latestContent = contentRef.current;
-      const latestTitle = chapterTitleRef.current;
+      if (!targetChapter) {
+        return;
+      }
 
-      try {
-        const words = countWords(latestContent);
-        const chars = countCharacters(latestContent);
+      const operationId =
+        ++saveOperationRef.current;
+
+      const latestContent =
+        overrides?.content ??
+        contentRef.current;
+
+      const latestTitle =
+        overrides?.title ??
+        titleRef.current;
+
+      saveStatusRef.current = "saving";
+      setSaveStatus("saving");
+
+      const promise = (async () => {
+        const wordCount =
+          countWords(latestContent);
+        const characterCount =
+          countCharacters(latestContent);
 
         const updatedChapter: Chapter = {
           ...targetChapter,
-          title: latestTitle.trim() || targetChapter.title,
+          title:
+            latestTitle.trim() ||
+            targetChapter.title,
           content: latestContent,
-          wordCount: words,
-          characterCount: chars,
+          wordCount,
+          characterCount,
           lastSavedAt: Date.now(),
         };
 
         await onSaveChapter(updatedChapter);
 
-        if (manual || Math.abs(words - (targetChapter.wordCount || 0)) > 20) {
-          await addSnapshot(targetChapter.bookId, targetChapter.id, {
-            chapterTitle: updatedChapter.title,
-            content: latestContent,
-            wordCount: words,
-            reason,
-          });
+        if (
+          manual ||
+          Math.abs(
+            wordCount -
+              (targetChapter.wordCount || 0)
+          ) > 20
+        ) {
+          await addSnapshot(
+            targetChapter.bookId,
+            targetChapter.id,
+            {
+              chapterTitle:
+                updatedChapter.title,
+              content: latestContent,
+              wordCount,
+              reason,
+            }
+          );
         }
 
-        setSaveStatus('saved');
+        if (
+          operationId !==
+            saveOperationRef.current ||
+          activeChapterRef.current?.id !==
+            targetChapter.id
+        ) {
+          return;
+        }
+
+        saveStatusRef.current = "saved";
+        setSaveStatus("saved");
         setLastSavedTime(
-          new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          })
+          formatUserDateTime(Date.now())
         );
+      })();
+
+      saveInFlightRef.current = promise;
+
+      try {
+        await promise;
       } catch (error) {
-        console.error('Save failed:', error);
-        setSaveStatus('error');
+        console.error("Save failed:", error);
+
+        if (
+          operationId ===
+            saveOperationRef.current &&
+          activeChapterRef.current?.id ===
+            targetChapter.id
+        ) {
+          saveStatusRef.current = "error";
+          setSaveStatus("error");
+        }
+
+        throw error;
+      } finally {
+        if (saveInFlightRef.current === promise) {
+          saveInFlightRef.current = null;
+        }
       }
     },
-    [onSaveChapter, addSnapshot]
+    [addSnapshot, onSaveChapter]
   );
 
-  // Fungsi Flush: Langsung simpan jika ada perubahan tertunda
-  const flushPendingSave = useCallback(() => {
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
-    }
-    if (saveStatusRef.current === 'unsaved') {
-      void performSave(false, 'Flush otomatis sebelum ganti/keluar');
-    }
-  }, [performSave]);
-
-  // Ganti Bab / Buku dengan Aman (Flush Data Lama Terlebih Dahulu)
-  const handleChapterChange = (newChapterId: string) => {
-    flushPendingSave();
-    setSelectedChapterId(newChapterId);
-  };
-
-  const handleBookChange = (newBookId: string) => {
-    flushPendingSave();
-    setSelectedBookId(newBookId);
-    const nextChaps = chapters.filter((c) => c.bookId === newBookId);
-    if (nextChaps.length > 0) {
-      setSelectedChapterId(nextChaps[0].id);
-    } else {
-      setSelectedChapterId('');
-    }
-  };
-
-  // Sync state lokal saat activeChapter berganti
-  useEffect(() => {
-    if (activeChapter) {
-      setContent(activeChapter.content || '');
-      setChapterTitle(activeChapter.title || '');
-      setSaveStatus('saved');
-      setLastSavedTime(
-        activeChapter.lastSavedAt
-          ? new Date(activeChapter.lastSavedAt).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          : 'Tersimpan'
-      );
-      refreshSnapshots(activeChapter.bookId, activeChapter.id);
-    } else {
-      setContent('');
-      setChapterTitle('');
-    }
-  }, [activeChapter?.id, activeChapter?.bookId, refreshSnapshots]);
-
-  // Handle Unmount / Close Window (Flush on Exit)
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      flushPendingSave();
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      flushPendingSave();
-    };
-  }, [flushPendingSave]);
-
-  // Preservasi Kursor Presisi
-  useLayoutEffect(() => {
-    if (pendingSelectionRef.current && textareaRef.current) {
-      const { start, end } = pendingSelectionRef.current;
-      textareaRef.current.setSelectionRange(start, end);
-      pendingSelectionRef.current = null;
-    }
-  }, [content]);
-
-  // Perhitungan Statistik
-  const currentWordCount = useMemo(() => countWords(content), [content]);
-  const currentCharacterCount = useMemo(() => countCharacters(content), [content]);
-  const readingTimeMinutes = useMemo(
-    () => Math.max(1, Math.ceil(currentWordCount / 200)),
-    [currentWordCount]
-  );
-
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setContent(val);
-    setSaveStatus('unsaved');
-
+  const scheduleAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
 
     autoSaveTimerRef.current = setTimeout(() => {
-      void performSave(false, 'Penyimpanan berkala otomatis');
+      autoSaveTimerRef.current = null;
+      void performSave(
+        false,
+        "Penyimpanan berkala otomatis"
+      );
     }, 1800);
-  };
+  }, [performSave]);
+
+  const flushPendingSave = useCallback(
+    async () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+
+      if (saveInFlightRef.current) {
+        try {
+          await saveInFlightRef.current;
+        } catch {
+          // State error already handled by performSave.
+        }
+      }
+
+      if (saveStatusRef.current === "unsaved") {
+        try {
+          await performSave(
+            false,
+            "Flush otomatis sebelum ganti/keluar"
+          );
+        } catch {
+          // State error already handled.
+        }
+      }
+    },
+    [performSave]
+  );
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        void performSave(true, 'Disimpan manual (Ctrl+S)');
-      }
-      if (e.key === 'Escape' && isFocusMode) {
-        setIsFocusMode(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [performSave, isFocusMode]);
-
-  const insertFormatting = (prefix: string, suffix = '', placeholder = '') => {
-    if (!textareaRef.current) return;
-    const el = textareaRef.current;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = content.substring(start, end) || placeholder;
-
-    const replacement = prefix + selected + suffix;
-    const newContent = content.substring(0, start) + replacement + content.substring(end);
-
-    pendingSelectionRef.current = {
-      start: start + prefix.length,
-      end: start + prefix.length + selected.length,
-    };
-
-    setContent(newContent);
-    setSaveStatus('unsaved');
-    el.focus();
-  };
-
-  const handleRestoreSnapshot = (snap: ChapterSnapshot) => {
-    if (
-      !window.confirm(
-        `Pulihkan versi naskah dari ${new Date(
-          snap.timestamp
-        ).toLocaleString()} (${snap.wordCount} kata)? Draft saat ini akan digantikan.`
-      )
-    ) {
+    if (!selectedBookId) {
       return;
     }
 
-    setContent(snap.content);
-    setChapterTitle(snap.chapterTitle);
+    if (
+      !loadedBooks[selectedBookId] &&
+      !loadingByBook[selectedBookId]
+    ) {
+      void refreshChapters(selectedBookId);
+    }
+  }, [
+    selectedBookId,
+    loadedBooks,
+    loadingByBook,
+    refreshChapters,
+  ]);
 
-    void performSave(
-      true,
-      `Dipulihkan dari snapshot (${new Date(snap.timestamp).toLocaleTimeString()})`
+  useEffect(() => {
+    if (!activeChapter) {
+      setContent("");
+      setChapterTitle("");
+      setSaveStatus("saved");
+      setLastSavedTime("Tersimpan");
+      previousContentRef.current = "";
+      return;
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    const nextContent =
+      activeChapter.content ?? "";
+    const nextTitle =
+      activeChapter.title ?? "";
+
+    setContent(nextContent);
+    setChapterTitle(nextTitle);
+    previousContentRef.current = nextContent;
+    contentRef.current = nextContent;
+    titleRef.current = nextTitle;
+    saveStatusRef.current = "saved";
+    setSaveStatus("saved");
+    setLastSavedTime(
+      activeChapter.lastSavedAt
+        ? formatUserDateTime(
+            activeChapter.lastSavedAt,
+            false
+          )
+        : "Tersimpan"
+    );
+    setMentionError(null);
+
+    void refreshSnapshots(
+      activeChapter.bookId,
+      activeChapter.id
+    );
+    void refreshCharacters(activeChapter.bookId);
+    void refreshMentions(
+      activeChapter.bookId,
+      activeChapter.id
+    );
+  }, [
+    activeChapter?.id,
+    activeChapter?.bookId,
+    activeChapter?.content,
+    activeChapter?.title,
+    activeChapter?.lastSavedAt,
+    refreshSnapshots,
+    refreshCharacters,
+    refreshMentions,
+  ]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      void flushPendingSave();
+    };
+
+    window.addEventListener(
+      "beforeunload",
+      handleBeforeUnload
     );
 
-    setIsHistoryDrawerOpen(false);
+    return () => {
+      window.removeEventListener(
+        "beforeunload",
+        handleBeforeUnload
+      );
+
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [flushPendingSave]);
+
+  const handleContentChange = (
+    event: React.ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    const next = event.target.value;
+
+    setContent(next);
+    contentRef.current = next;
+    previousContentRef.current = next;
+    saveStatusRef.current = "unsaved";
+    setSaveStatus("unsaved");
+    scheduleAutoSave();
   };
 
-  const handleExportText = (format: 'txt' | 'md') => {
-    if (!activeChapter) return;
-    const ext = format === 'md' ? 'md' : 'txt';
-    const textData = `# ${chapterTitle}\n\n${content}`;
-    const blob = new Blob([textData], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${chapterTitle.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const markUnsaved = useCallback(() => {
+    saveStatusRef.current = "unsaved";
+    setSaveStatus("unsaved");
+    scheduleAutoSave();
+  }, [scheduleAutoSave]);
+
+  const insertFormatting = useCallback(
+    (
+      prefix: string,
+      suffix = "",
+      placeholder = ""
+    ) => {
+      const textarea = textareaRef.current;
+
+      if (!textarea) {
+        return;
+      }
+
+      textarea.focus();
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const selected =
+        contentRef.current.slice(start, end);
+
+      const selectedOrPlaceholder =
+        selected || placeholder;
+
+      const replacement =
+        prefix +
+        selectedOrPlaceholder +
+        suffix;
+
+      const nextContent =
+        contentRef.current.slice(0, start) +
+        replacement +
+        contentRef.current.slice(end);
+
+      setContent(nextContent);
+      contentRef.current = nextContent;
+      previousContentRef.current = nextContent;
+
+      const selectionStart =
+        start + prefix.length;
+      const selectionEnd =
+        selectionStart +
+        selectedOrPlaceholder.length;
+
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(
+          selectionStart,
+          selectionEnd
+        );
+      });
+
+      markUnsaved();
+    },
+    [markUnsaved]
+  );
+
+  const insertLinePrefix = useCallback(
+    (
+      prefix: string,
+      placeholder: string
+    ) => {
+      const textarea = textareaRef.current;
+
+      if (!textarea) {
+        return;
+      }
+
+      textarea.focus();
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const source = contentRef.current;
+
+      const lineStart =
+        source.lastIndexOf("\n", start - 1) + 1;
+      const lineEndIndex =
+        source.indexOf("\n", end);
+      const lineEnd =
+        lineEndIndex === -1
+          ? source.length
+          : lineEndIndex;
+
+      const selectedLine =
+        source.slice(lineStart, lineEnd);
+
+      const body =
+        selectedLine.trim() ||
+        placeholder;
+
+      const alreadyPrefixed =
+        body.startsWith(prefix);
+
+      const nextLine = alreadyPrefixed
+        ? body.slice(prefix.length).replace(
+            /^\s+/,
+            ""
+          )
+        : `${prefix}${body}`;
+
+      const nextContent =
+        source.slice(0, lineStart) +
+        nextLine +
+        source.slice(lineEnd);
+
+      setContent(nextContent);
+      contentRef.current = nextContent;
+      previousContentRef.current = nextContent;
+
+      const selectionStart =
+        lineStart +
+        (alreadyPrefixed
+          ? 0
+          : prefix.length);
+      const selectionEnd =
+        selectionStart +
+        nextLine.length -
+        (alreadyPrefixed ? 0 : prefix.length);
+
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(
+          Math.max(selectionStart, lineStart),
+          Math.max(selectionStart, selectionEnd)
+        );
+      });
+
+      markUnsaved();
+    },
+    [markUnsaved]
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "s"
+      ) {
+        event.preventDefault();
+        void performSave(
+          true,
+          "Disimpan manual (Ctrl+S)"
+        );
+        return;
+      }
+
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "b"
+      ) {
+        event.preventDefault();
+        insertFormatting("**", "**", "Teks Tebal");
+        return;
+      }
+
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "i"
+      ) {
+        event.preventDefault();
+        insertFormatting("*", "*", "Teks Miring");
+        return;
+      }
+
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "u"
+      ) {
+        event.preventDefault();
+        insertFormatting(
+          "<u>",
+          "</u>",
+          "Teks Garis Bawah"
+        );
+        return;
+      }
+
+      if (
+        event.key === "Escape" &&
+        isFocusMode
+      ) {
+        setIsFocusMode(false);
+      }
+    };
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () =>
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+  }, [
+    insertFormatting,
+    performSave,
+    isFocusMode,
+  ]);
+
+  const handleChapterChange = useCallback(
+    async (newChapterId: string) => {
+      if (
+        !availableChapters.some(
+          (chapter) => chapter.id === newChapterId
+        )
+      ) {
+        return;
+      }
+
+      const requestId =
+        ++transitionRequestRef.current;
+
+      await flushPendingSave();
+
+      if (
+        requestId !==
+        transitionRequestRef.current
+      ) {
+        return;
+      }
+
+      setSelectedChapterId(newChapterId);
+    },
+    [availableChapters, flushPendingSave]
+  );
+
+  const handleBookChange = useCallback(
+    async (newBookId: string) => {
+      if (!books.some((book) => book.id === newBookId)) {
+        return;
+      }
+
+      const requestId =
+        ++transitionRequestRef.current;
+
+      await flushPendingSave();
+
+      if (
+        requestId !==
+        transitionRequestRef.current
+      ) {
+        return;
+      }
+
+      setSelectedBookId(newBookId);
+
+      const nextChapters = [
+        ...(chaptersByBook[newBookId] ?? []),
+      ].sort((a, b) => a.order - b.order);
+
+      setSelectedChapterId(
+        nextChapters[0]?.id || ""
+      );
+
+      onSelectBook(newBookId);
+    },
+    [
+      books,
+      chaptersByBook,
+      flushPendingSave,
+      onSelectBook,
+    ]
+  );
+
+  const activeBookCharacters =
+    useMemo(
+      () =>
+        selectedBookId
+          ? characters.filter((character) =>
+              character.bookIds?.includes(
+                selectedBookId
+              )
+            )
+          : [],
+      [characters, selectedBookId]
+    );
+
+  const isMentionOverlapping = useCallback(
+    (
+      start: number,
+      end: number
+    ) =>
+      mentions.some((mention) => {
+        if (
+          mention.startOffset === undefined ||
+          mention.endOffset === undefined
+        ) {
+          return false;
+        }
+
+        return (
+          start < mention.endOffset &&
+          end > mention.startOffset
+        );
+      }),
+    [mentions]
+  );
+
+  const getCurrentSelection = () => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return {
+        start: 0,
+        end: 0,
+      };
+    }
+
+    return {
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+    };
   };
+
+  const handleCreateCharacterMention =
+    useCallback(
+      async (
+        character: CharacterWiki,
+        fallbackStart: number,
+        fallbackEnd: number
+      ) => {
+        if (!activeChapter) {
+          return;
+        }
+
+        const textarea =
+          textareaRef.current;
+
+        const currentSelection =
+          textarea
+            ? {
+                start: textarea.selectionStart,
+                end: textarea.selectionEnd,
+              }
+            : {
+                start: fallbackStart,
+                end: fallbackEnd,
+              };
+
+        const start = Math.max(
+          0,
+          Math.min(
+            currentSelection.start,
+            contentRef.current.length
+          )
+        );
+
+        const end = Math.max(
+          start,
+          Math.min(
+            currentSelection.end,
+            contentRef.current.length
+          )
+        );
+
+        const selectedText =
+          contentRef.current.slice(start, end);
+
+        const displayText =
+          selectedText || character.fullName;
+
+        const mentionStart = start;
+        const mentionEnd =
+          selectedText
+            ? end
+            : start + character.fullName.length;
+
+        if (
+          isMentionOverlapping(
+            mentionStart,
+            mentionEnd
+          )
+        ) {
+          setMentionError(
+            "Bagian teks tersebut sudah memiliki character mention."
+          );
+          return;
+        }
+
+        setMentionOperationLoading(true);
+        setMentionError(null);
+
+        try {
+          let nextContent =
+            contentRef.current;
+
+          if (!selectedText) {
+            nextContent =
+              contentRef.current.slice(0, start) +
+              character.fullName +
+              contentRef.current.slice(start);
+
+            setContent(nextContent);
+            contentRef.current = nextContent;
+            previousContentRef.current = nextContent;
+            markUnsaved();
+          }
+
+          await addMention(
+            activeChapter.bookId,
+            activeChapter.id,
+            {
+              characterId: character.id,
+              displayText,
+              startOffset: mentionStart,
+              endOffset: mentionEnd,
+            }
+          );
+
+          await refreshMentions(
+            activeChapter.bookId,
+            activeChapter.id
+          );
+
+          requestAnimationFrame(() => {
+            const editor =
+              textareaRef.current;
+
+            if (!editor) {
+              return;
+            }
+
+            editor.focus();
+            editor.setSelectionRange(
+              mentionEnd,
+              mentionEnd
+            );
+          });
+        } catch (error) {
+          console.error(
+            "Gagal membuat character mention:",
+            error
+          );
+
+          setMentionError(
+            error instanceof Error
+              ? error.message
+              : "Gagal membuat character mention."
+          );
+        } finally {
+          setMentionOperationLoading(false);
+        }
+      },
+      [
+        activeChapter,
+        addMention,
+        isMentionOverlapping,
+        markUnsaved,
+        refreshMentions,
+      ]
+    );
+
+  const handleNavigateToMention = useCallback(
+    (mention: CharacterMention) => {
+      const textarea = textareaRef.current;
+
+      if (
+        !textarea ||
+        mention.startOffset === undefined ||
+        mention.endOffset === undefined
+      ) {
+        return;
+      }
+
+      const start = Math.max(
+        0,
+        Math.min(
+          mention.startOffset,
+          contentRef.current.length
+        )
+      );
+
+      const end = Math.max(
+        start,
+        Math.min(
+          mention.endOffset,
+          contentRef.current.length
+        )
+      );
+
+      textarea.focus();
+      textarea.setSelectionRange(start, end);
+
+      const before =
+        contentRef.current.slice(0, start);
+      const lineNumber =
+        before.split("\n").length;
+
+      const computed =
+        window.getComputedStyle(textarea);
+
+      const lineHeight =
+        parseFloat(computed.lineHeight) ||
+        fontSize * lineSpacing;
+
+      textarea.scrollTop = Math.max(
+        0,
+        (lineNumber - 3) * lineHeight
+      );
+    },
+    [fontSize, lineSpacing]
+  );
+
+  const handleRemoveMention = useCallback(
+    async (mention: CharacterMention) => {
+      if (!activeChapter) {
+        return;
+      }
+
+      setMentionOperationLoading(true);
+      setMentionError(null);
+
+      try {
+        await removeMention(
+          activeChapter.bookId,
+          activeChapter.id,
+          mention.id
+        );
+
+        await refreshMentions(
+          activeChapter.bookId,
+          activeChapter.id
+        );
+      } catch (error) {
+        console.error(
+          "Gagal menghapus mention:",
+          error
+        );
+
+        setMentionError(
+          error instanceof Error
+            ? error.message
+            : "Gagal menghapus character mention."
+        );
+      } finally {
+        setMentionOperationLoading(false);
+      }
+    },
+    [
+      activeChapter,
+      refreshMentions,
+      removeMention,
+    ]
+  );
+
+  const handleRestoreSnapshot =
+    useCallback(
+      async (snapshot: ChapterSnapshot) => {
+        if (
+          !window.confirm(
+            `Pulihkan versi naskah dari ${formatUserDateTime(
+              snapshot.timestamp
+            )}? Draft saat ini akan digantikan.`
+          )
+        ) {
+          return;
+        }
+
+        await flushPendingSave();
+
+        setContent(snapshot.content);
+        contentRef.current = snapshot.content;
+        previousContentRef.current =
+          snapshot.content;
+
+        setChapterTitle(snapshot.chapterTitle);
+        titleRef.current = snapshot.chapterTitle;
+
+        saveStatusRef.current = "unsaved";
+        setSaveStatus("unsaved");
+
+        void performSave(
+          true,
+          `Dipulihkan dari snapshot (${formatUserDateTime(
+            snapshot.timestamp
+          )})`,
+          {
+            content: snapshot.content,
+            title: snapshot.chapterTitle,
+          }
+        );
+
+        setIsHistoryDrawerOpen(false);
+      },
+      [flushPendingSave, performSave]
+    );
+
+  const handleExportRtf = useCallback(() => {
+    if (!activeChapter) {
+      return;
+    }
+
+    const rtf = [
+      `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\viewkind4\\uc1\\f0\\fs24`,
+      `\\qc\\fs36\\b ${escapeRtfText(
+        chapterTitle ||
+          `Bab ${activeChapter.chapterNumber}`
+      )}\\b0\\fs24\\par\\ql`,
+      markdownToRtf(content),
+      "}",
+    ].join("");
+
+    const blob = new Blob([rtf], {
+      type: "application/rtf;charset=utf-8",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const anchor =
+      window.document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = `${sanitizeDownloadFileName(
+      chapterTitle ||
+        `Bab ${activeChapter.chapterNumber}`
+    )}.rtf`;
+    anchor.click();
+
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }, [activeChapter, chapterTitle, content]);
+
+  const currentWordCount =
+    countWords(content);
+
+  const currentCharacterCount =
+    countCharacters(content);
+
+  const readingTimeMinutes = Math.max(
+    1,
+    Math.ceil(currentWordCount / 200)
+  );
+
+  const activeBookLoading =
+    selectedBookId
+      ? Boolean(loadingByBook[selectedBookId])
+      : false;
 
   if (books.length === 0) {
     return (
-      <div
-        id="empty-editor-state"
-        className="py-16 px-4 text-center border-2 border-dashed border-[#2A2A3C] rounded-3xl bg-[#181826] flex flex-col items-center justify-center max-w-2xl mx-auto shadow-inner"
-      >
-        <div className="p-4 bg-[#222234] rounded-2xl border border-[#35354C] text-[#D4AF37] mb-4 shadow-lg">
-          <BookOpen className="w-10 h-10" />
-        </div>
-        <h3 className="font-editorial text-xl sm:text-2xl font-bold text-[#FAF7EE] mb-2">
+      <div className="py-16 px-4 text-center border-2 border-dashed border-[#2A2A3C] rounded-3xl bg-[#181826] max-w-2xl mx-auto">
+        <BookOpen className="w-10 h-10 mx-auto mb-4 text-[#D4AF37]" />
+        <h3 className="font-editorial text-xl font-bold text-[#FAF7EE] mb-2">
           Belum ada proyek buku untuk ditulis.
         </h3>
-        <p className="text-xs sm:text-sm text-[#9E9EB2] max-w-md mb-6 leading-relaxed">
-          Sebelum menggunakan Studio Editor, buat buku cerita pertamamu di Workspace dan tambahkan bab naskah.
+        <p className="text-xs text-[#9E9EB2] mb-6">
+          Buat buku dan chapter dari Workspace terlebih dahulu.
         </p>
         <button
-          onClick={() => onSelectBook('')}
-          className="py-3 px-6 bg-gradient-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
+          type="button"
+          onClick={() => onSelectBook("")}
+          className="py-3 px-6 bg-[#D4AF37] text-[#121212] rounded-xl font-semibold"
         >
-          <BookOpen className="w-4 h-4" />
-          <span>Buka Workspace & Buat Buku</span>
+          Buka Workspace
         </button>
+      </div>
+    );
+  }
+
+  if (!activeChapter && activeBookLoading) {
+    return (
+      <div className="py-16 text-center text-[#9E9EB2]">
+        <FileText className="w-10 h-10 mx-auto mb-3 text-[#D4AF37] animate-pulse" />
+        Memuat bab naskah...
       </div>
     );
   }
 
   if (!activeChapter) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between bg-[#1E1E2E] border border-[#2A2A3C] p-4 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-[#8E8EA4]">Pilih Buku:</label>
-            <select
-              value={selectedBookId}
-              onChange={(e) => handleBookChange(e.target.value)}
-              className="px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs text-[#FAF7EE] outline-none"
-            >
-              {books.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="py-16 text-center border-2 border-dashed border-[#2A2A3C] rounded-3xl bg-[#181826] max-w-2xl mx-auto p-6">
-          <FileText className="w-10 h-10 mx-auto mb-3 text-[#D4AF37]/50" />
-          <h3 className="font-editorial text-xl font-bold text-[#FAF7EE] mb-2">
-            Buku ini belum memiliki bab naskah.
-          </h3>
-          <p className="text-xs text-[#9E9EB2] mb-6">
-            Buka Workspace untuk menambahkan bab baru pada buku ini.
-          </p>
-          <button
-            onClick={() => onSelectBook(selectedBookId)}
-            className="py-2.5 px-5 bg-[#D4AF37] text-[#121212] font-semibold text-xs rounded-xl shadow-md cursor-pointer"
-          >
-            Buka Bab di Workspace
-          </button>
-        </div>
+      <div className="py-16 px-4 text-center border-2 border-dashed border-[#2A2A3C] rounded-3xl bg-[#181826] max-w-2xl mx-auto">
+        <FileText className="w-10 h-10 mx-auto mb-4 text-[#D4AF37]" />
+        <h3 className="font-editorial text-xl font-bold text-[#FAF7EE] mb-2">
+          Buku ini belum memiliki bab naskah.
+        </h3>
+        <p className="text-xs text-[#9E9EB2]">
+          Tambahkan chapter dari Workspace.
+        </p>
       </div>
     );
   }
 
+  const editorFontFamily =
+    fontFamily === "serif"
+      ? "'Cinzel', serif, Georgia, 'Times New Roman'"
+      : fontFamily === "mono"
+      ? "'JetBrains Mono', monospace"
+      : "'Plus Jakarta Sans', sans-serif";
+
+  const userTimeZone = getUserTimeZone();
+
   return (
     <div
       id="novel-editor-container"
-      className={`flex flex-col transition-all duration-300 ${
+      className={`flex flex-col gap-4 ${
         isFocusMode
-          ? 'fixed inset-0 z-50 bg-[#121212] p-4 sm:p-8 overflow-y-auto'
-          : 'space-y-4'
+          ? "fixed inset-0 z-50 bg-[#121212] p-4 sm:p-8 overflow-y-auto"
+          : ""
       }`}
     >
       <div className="bg-[#1E1E2E] border border-[#2A2A3C] rounded-2xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3" data-tour="editor-selector-bar">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-[#D4AF37] shrink-0" />
-            <select
-              value={selectedBookId}
-              onChange={(e) => handleBookChange(e.target.value)}
-              className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
-            >
-              {books.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.title}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <BookOpen className="w-4 h-4 text-[#D4AF37]" />
+
+          <select
+            value={selectedBookId}
+            onChange={(event) =>
+              void handleBookChange(
+                event.target.value
+              )
+            }
+            className="max-w-56 px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none"
+          >
+            {books.map((book) => (
+              <option
+                key={book.id}
+                value={book.id}
+              >
+                {book.title}
+              </option>
+            ))}
+          </select>
 
           {availableChapters.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#6E6E85]">/</span>
+            <>
+              <span className="text-[#6E6E85]">/</span>
               <select
                 value={selectedChapterId}
-                onChange={(e) => handleChapterChange(e.target.value)}
-                className="max-w-[180px] sm:max-w-[220px] px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] focus:border-[#D4AF37] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none truncate cursor-pointer"
+                onChange={(event) =>
+                  void handleChapterChange(
+                    event.target.value
+                  )
+                }
+                className="max-w-56 px-3 py-1.5 bg-[#161624] border border-[#2A2A3C] rounded-xl text-xs font-semibold text-[#FAF7EE] outline-none"
               >
-                {availableChapters.map((chap) => (
-                  <option key={chap.id} value={chap.id}>
-                    Bab {chap.chapterNumber}: {chap.title}
+                {availableChapters.map((chapter) => (
+                  <option
+                    key={chapter.id}
+                    value={chapter.id}
+                  >
+                    Bab {chapter.chapterNumber}:{" "}
+                    {chapter.title}
                   </option>
                 ))}
               </select>
-            </div>
+            </>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3" data-tour="editor-toolbar-actions">
-          <div className="flex items-center gap-2" data-tour="editor-save-indicator">
-            <div
-              id="editor-save-status-pill"
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono border"
-              style={{
-                backgroundColor:
-                  saveStatus === 'saved'
-                    ? 'rgba(16, 185, 129, 0.12)'
-                    : saveStatus === 'saving'
-                    ? 'rgba(59, 130, 246, 0.12)'
-                    : saveStatus === 'unsaved'
-                    ? 'rgba(245, 158, 11, 0.12)'
-                    : 'rgba(239, 68, 68, 0.12)',
-                borderColor:
-                  saveStatus === 'saved'
-                    ? 'rgba(16, 185, 129, 0.3)'
-                    : saveStatus === 'saving'
-                    ? 'rgba(59, 130, 246, 0.3)'
-                    : saveStatus === 'unsaved'
-                    ? 'rgba(245, 158, 11, 0.3)'
-                    : 'rgba(239, 68, 68, 0.3)',
-                color:
-                  saveStatus === 'saved'
-                    ? '#34D399'
-                    : saveStatus === 'saving'
-                    ? '#60A5FA'
-                    : saveStatus === 'unsaved'
-                    ? '#FBBF24'
-                    : '#F87171',
-              }}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  saveStatus === 'saving'
-                    ? 'animate-ping bg-blue-400'
-                    : saveStatus === 'unsaved'
-                    ? 'bg-amber-400'
-                    : saveStatus === 'saved'
-                    ? 'bg-emerald-400'
-                    : 'bg-red-400'
-                }`}
-              />
-              <span>
-                {saveStatus === 'saved'
-                  ? `Tersimpan (${lastSavedTime})`
-                  : saveStatus === 'saving'
-                  ? 'Menyimpan...'
-                  : saveStatus === 'unsaved'
-                  ? 'Belum Tersimpan'
-                  : 'Gagal Menyimpan'}
-              </span>
-            </div>
-
-            <button
-              id="btn-manual-save"
-              onClick={() => void performSave(true, 'Simpan manual')}
-              className="py-1.5 px-3 bg-[#242438] hover:bg-[#30304C] text-[#D4AF37] border border-[#D4AF37]/40 hover:border-[#D4AF37] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
-              title="Simpan Naskah (Ctrl+S)"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>Simpan</span>
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="px-3 py-1.5 rounded-full text-[11px] border border-[#2A2A3C] text-[#B8B8CB]">
+            {saveStatus === "saved"
+              ? `Tersimpan ${lastSavedTime}`
+              : saveStatus === "saving"
+              ? "Menyimpan..."
+              : saveStatus === "unsaved"
+              ? "Belum tersimpan"
+              : "Gagal menyimpan"}
           </div>
 
           <button
-            id="btn-emergency-draft-history"
-            data-tour="editor-history-vault"
-            onClick={() => setIsHistoryDrawerOpen(!isHistoryDrawerOpen)}
-            className={`py-1.5 px-3 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-              isHistoryDrawerOpen
-                ? 'bg-[#D4AF37] text-[#121212]'
-                : 'bg-[#222234] text-[#B0B0C4] hover:text-[#FAF7EE] border border-[#2A2A3C]'
-            }`}
-            title="Riwayat Draft Darurat & Pemulihan"
+            type="button"
+            onClick={() =>
+              void performSave(
+                true,
+                "Simpan manual"
+              )
+            }
+            className="py-1.5 px-3 bg-[#242438] text-[#D4AF37] border border-[#D4AF37]/40 rounded-xl text-xs font-semibold flex items-center gap-1.5"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Simpan
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setIsHistoryDrawerOpen(
+                (current) => !current
+              )
+            }
+            className="py-1.5 px-3 bg-[#222234] text-[#B0B0C4] border border-[#2A2A3C] rounded-xl text-xs font-semibold flex items-center gap-1.5"
           >
             <History className="w-3.5 h-3.5" />
-            <span>Draft Darurat ({snapshots.length})</span>
+            Draft ({activeSnapshots.length})
           </button>
 
           <button
-            id="btn-toggle-focus-mode"
-            data-tour="editor-focus-btn"
-            onClick={() => setIsFocusMode(!isFocusMode)}
-            className="p-2 bg-[#222234] hover:bg-[#2E2E44] text-[#FAF7EE] rounded-xl text-xs border border-[#2A2A3C] transition-colors cursor-pointer"
-            title={isFocusMode ? 'Keluar Mode Fokus (Esc)' : 'Mode Fokus Layar Penuh'}
+            type="button"
+            onClick={() =>
+              setIsFocusMode(
+                (current) => !current
+              )
+            }
+            className="p-2 bg-[#222234] text-[#FAF7EE] rounded-xl border border-[#2A2A3C]"
+            title={
+              isFocusMode
+                ? "Keluar mode fokus"
+                : "Mode fokus"
+            }
           >
-            {isFocusMode ? <Minimize2 className="w-4 h-4 text-[#D4AF37]" /> : <Maximize2 className="w-4 h-4" />}
+            {isFocusMode ? (
+              <Minimize2 className="w-4 h-4" />
+            ) : (
+              <Maximize2 className="w-4 h-4" />
+            )}
           </button>
         </div>
       </div>
 
-      <div
-        data-tour="editor-stats-ribbon"
-        className="bg-[#181826] border border-[#2A2A3C] px-5 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs"
-      >
+      <div className="bg-[#181826] border border-[#2A2A3C] px-5 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#8E8EA4]">Jumlah Kata:</span>
-            <span className="font-mono font-bold text-[#D4AF37] text-sm">
+          <span className="text-[#8E8EA4]">
+            Kata:{" "}
+            <strong className="text-[#D4AF37]">
               {currentWordCount.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#8E8EA4]">Karakter:</span>
-            <span className="font-mono text-[#FAF7EE]">
+            </strong>
+          </span>
+
+          <span className="text-[#8E8EA4]">
+            Karakter:{" "}
+            <strong className="text-[#FAF7EE]">
               {currentCharacterCount.toLocaleString()}
-            </span>
-          </div>
-          <div className="hidden sm:flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-[#8E8EA4]" />
-            <span className="text-[#8E8EA4]">Estimasi Baca: ~{readingTimeMinutes} mnt</span>
-          </div>
+            </strong>
+          </span>
+
+          <span className="hidden sm:inline text-[#8E8EA4]">
+            <Clock className="w-3.5 h-3.5 inline mr-1" />
+            Baca ~{readingTimeMinutes} mnt
+          </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-[#8E8EA4]">
-            Target Harian:{' '}
-            <span className="font-mono text-[#FAF7EE]">
-              {userProfile?.dailyWordGoal || 1000} kata
-            </span>
-          </div>
-          <div className="w-24 bg-[#141420] rounded-full h-2 overflow-hidden border border-[#2A2A3C]">
-            <div
-              className="h-full bg-gradient-to-r from-[#8A1825] to-[#D4AF37] rounded-full transition-all"
-              style={{
-                width: `${Math.min(
-                  100,
-                  (currentWordCount / (userProfile?.dailyWordGoal || 1000)) * 100
-                )}%`,
-              }}
-            />
-          </div>
+        <div className="flex items-center gap-2 text-[#8E8EA4]">
+          <span>
+            Zona waktu:{" "}
+            <strong className="text-[#FAF7EE]">
+              {userTimeZone}
+            </strong>
+          </span>
         </div>
       </div>
 
-      <div
-        data-tour="editor-export-tools"
-        className="bg-[#1E1E2E] border border-[#2A2A3C] p-2.5 rounded-2xl flex flex-wrap items-center justify-between gap-2"
-      >
-        <div className="flex flex-wrap items-center gap-1" data-tour="editor-formatting-tools">
-          <button
-            type="button"
-            onClick={() => insertFormatting('**', '**', 'Teks Tebal')}
-            className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
-            title="Tebal (**teks**)"
-          >
-            <Bold className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => insertFormatting('*', '*', 'Teks Miring')}
-            className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
-            title="Miring (*teks*)"
-          >
-            <Italic className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => insertFormatting('<u>', '</u>', 'Teks Garis Bawah')}
-            className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
-            title="Garis Bawah"
-          >
-            <Underline className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => insertFormatting('~~', '~~', 'Teks Coret')}
-            className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
-            title="Coret (~~teks~~)"
-          >
-            <Strikethrough className="w-4 h-4" />
-          </button>
+      <div className="bg-[#1E1E2E] border border-[#2A2A3C] p-2.5 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1">
+          {[
+            {
+              title: "Tebal (Ctrl/Cmd+B)",
+              icon: <Bold className="w-4 h-4" />,
+              action: () =>
+                insertFormatting(
+                  "**",
+                  "**",
+                  "Teks Tebal"
+                ),
+            },
+            {
+              title: "Miring (Ctrl/Cmd+I)",
+              icon: <Italic className="w-4 h-4" />,
+              action: () =>
+                insertFormatting(
+                  "*",
+                  "*",
+                  "Teks Miring"
+                ),
+            },
+            {
+              title: "Garis bawah (Ctrl/Cmd+U)",
+              icon: <Underline className="w-4 h-4" />,
+              action: () =>
+                insertFormatting(
+                  "<u>",
+                  "</u>",
+                  "Teks Garis Bawah"
+                ),
+            },
+            {
+              title: "Coret",
+              icon: (
+                <Strikethrough className="w-4 h-4" />
+              ),
+              action: () =>
+                insertFormatting(
+                  "~~",
+                  "~~",
+                  "Teks Coret"
+                ),
+            },
+          ].map((tool) => (
+            <button
+              key={tool.title}
+              type="button"
+              title={tool.title}
+              onMouseDown={(event) =>
+                event.preventDefault()
+              }
+              onClick={tool.action}
+              className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg"
+            >
+              {tool.icon}
+            </button>
+          ))}
 
           <span className="w-px h-5 bg-[#2A2A3C] mx-1" />
 
           <button
             type="button"
-            onClick={() => insertFormatting('# ', '\n', 'Judul Utama')}
-            className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
+            onMouseDown={(event) =>
+              event.preventDefault()
+            }
+            onClick={() =>
+              insertLinePrefix(
+                "# ",
+                "Judul Utama"
+              )
+            }
+            className="p-1.5 text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg"
             title="Heading 1"
           >
             <Heading1 className="w-4 h-4" />
           </button>
+
           <button
             type="button"
-            onClick={() => insertFormatting('## ', '\n', 'Sub Judul')}
-            className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
+            onMouseDown={(event) =>
+              event.preventDefault()
+            }
+            onClick={() =>
+              insertLinePrefix(
+                "## ",
+                "Sub Judul"
+              )
+            }
+            className="p-1.5 text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg"
             title="Heading 2"
           >
             <Heading2 className="w-4 h-4" />
           </button>
+
           <button
             type="button"
-            onClick={() => insertFormatting('> ', '\n', 'Kutipan / Monolog batin')}
-            className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
-            title="Kutipan Monolog"
+            onMouseDown={(event) =>
+              event.preventDefault()
+            }
+            onClick={() =>
+              insertLinePrefix(
+                "> ",
+                "Kutipan / Monolog batin"
+              )
+            }
+            className="p-1.5 text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg"
+            title="Kutipan"
           >
             <Quote className="w-4 h-4" />
           </button>
 
-          <span className="w-px h-5 bg-[#2A2A3C] mx-1" />
-
           <button
             type="button"
-            onClick={() => insertFormatting('— ', '', 'Dialog tokoh...')}
-            className="py-1 px-2 hover:bg-[#2A2A3E] text-xs font-mono text-[#D4AF37] rounded-lg transition-colors cursor-pointer"
-            title="Garis Dialog Panjang (—)"
+            onMouseDown={(event) =>
+              event.preventDefault()
+            }
+            onClick={() =>
+              insertFormatting(
+                "— ",
+                "",
+                "Dialog tokoh..."
+              )
+            }
+            className="py-1 px-2 text-xs font-mono text-[#D4AF37] rounded-lg hover:bg-[#2A2A3E]"
           >
             — Dialog
           </button>
+
           <button
             type="button"
-            onClick={() => insertFormatting('\n\n* * *\n\n', '', '')}
-            className="py-1 px-2 hover:bg-[#2A2A3E] text-xs font-mono text-[#FAF7EE] rounded-lg transition-colors cursor-pointer"
-            title="Pembatas Adegan (* * *)"
+            onMouseDown={(event) =>
+              event.preventDefault()
+            }
+            onClick={() =>
+              insertFormatting(
+                "\n\n* * *\n\n",
+                "",
+                ""
+              )
+            }
+            className="py-1 px-2 text-xs font-mono text-[#FAF7EE] rounded-lg hover:bg-[#2A2A3E]"
           >
             * * * Adegan
           </button>
+
+          <span className="w-px h-5 bg-[#2A2A3C] mx-1" />
+
+          <CharacterMentionPicker
+            characters={activeBookCharacters}
+            mentions={mentions}
+            disabled={mentionOperationLoading || isPreviewOpen}
+            error={mentionError}
+            onCreateMention={
+              handleCreateCharacterMention
+            }
+          />
+
+          <button
+            type="button"
+            onClick={() =>
+              setIsMentionPanelOpen(
+                (current) => !current
+              )
+            }
+            className={`py-1 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${
+              isMentionPanelOpen
+                ? "bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30"
+                : "text-[#B0B0C4] hover:bg-[#2A2A3E]"
+            }`}
+          >
+            <PanelRight className="w-3.5 h-3.5" />
+            Mentions
+            {mentions.length > 0 && (
+              <span className="min-w-4.5 h-4.5 px-1 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] text-[9px] flex items-center justify-center">
+                {mentions.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        <div className="flex items-center gap-2" data-tour="editor-typography-group">
+        <div className="flex items-center gap-2">
           <select
             value={fontFamily}
-            onChange={(e) => setFontFamily(e.target.value as 'serif' | 'sans' | 'mono')}
-            className="px-2.5 py-1 bg-[#161624] border border-[#2A2A3C] rounded-lg text-xs text-[#C8C8DC] outline-none cursor-pointer"
+            onChange={(event) =>
+              setFontFamily(
+                event.target.value as
+                  | "serif"
+                  | "sans"
+                  | "mono"
+              )
+            }
+            className="px-2.5 py-1 bg-[#161624] border border-[#2A2A3C] rounded-lg text-xs text-[#C8C8DC]"
           >
-            <option value="serif">Serif (Editorial)</option>
-            <option value="sans">Sans-Serif</option>
-            <option value="mono">Monospace</option>
+            <option value="serif">
+              Serif
+            </option>
+            <option value="sans">
+              Sans
+            </option>
+            <option value="mono">
+              Monospace
+            </option>
           </select>
 
           <select
             value={fontSize}
-            onChange={(e) => setFontSize(Number(e.target.value))}
-            className="px-2 py-1 bg-[#161624] border border-[#2A2A3C] rounded-lg text-xs text-[#C8C8DC] outline-none cursor-pointer font-mono"
+            onChange={(event) =>
+              setFontSize(
+                Number(event.target.value)
+              )
+            }
+            className="px-2 py-1 bg-[#161624] border border-[#2A2A3C] rounded-lg text-xs text-[#C8C8DC]"
           >
-            <option value={15}>15px</option>
-            <option value={17}>17px</option>
-            <option value={18}>18px</option>
-            <option value={20}>20px</option>
-            <option value={22}>22px</option>
+            {[15, 17, 18, 20, 22].map(
+              (size) => (
+                <option
+                  key={size}
+                  value={size}
+                >
+                  {size}px
+                </option>
+              )
+            )}
           </select>
 
-          <div className="flex items-center gap-1" data-tour="editor-export-btn">
-            <button
-              onClick={() => handleExportText('txt')}
-              className="p-1.5 hover:bg-[#2A2A3E] text-[#B0B0C4] hover:text-[#FAF7EE] rounded-lg text-xs transition-colors cursor-pointer"
-              title="Unduh sebagai Naskah .txt"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          </div>
+          <select
+            value={lineSpacing}
+            onChange={(event) =>
+              setLineSpacing(
+                Number(event.target.value)
+              )
+            }
+            className="px-2 py-1 bg-[#161624] border border-[#2A2A3C] rounded-lg text-xs text-[#C8C8DC]"
+            title="Jarak baris"
+          >
+            {[1.4, 1.6, 1.8, 2].map(
+              (value) => (
+                <option
+                  key={value}
+                  value={value}
+                >
+                  {value}x
+                </option>
+              )
+            )}
+          </select>
+
+          <button
+            type="button"
+            onClick={() =>
+              setIsPreviewOpen(
+                (current) => !current
+              )
+            }
+            className={`py-1.5 px-2.5 rounded-lg text-xs font-semibold ${
+              isPreviewOpen
+                ? "bg-[#D4AF37] text-[#121212]"
+                : "bg-[#222234] text-[#B0B0C4]"
+            }`}
+          >
+            {isPreviewOpen
+              ? "Editor"
+              : "Preview"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportRtf}
+            className="p-1.5 text-[#B0B0C4] hover:text-[#FAF7EE]"
+            title="Unduh chapter dengan formatting (RTF)"
+            aria-label="Unduh chapter dengan formatting (RTF)"
+          >
+            <Download className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      <div
-        data-tour="editor-canvas-stage"
-        className="relative flex flex-col bg-[#1A1A28] border border-[#2A2A3C] rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-2xl min-h-[550px]"
-      >
-        <input
-          id="editor-chapter-title-input"
-          type="text"
-          value={chapterTitle}
-          onChange={(e) => {
-            setChapterTitle(e.target.value);
-            setSaveStatus('unsaved');
-          }}
-          placeholder="Judul Bab..."
-          className="font-editorial text-2xl sm:text-3xl font-bold text-[#FAF7EE] bg-transparent border-b border-[#2A2A3C] pb-3 mb-6 outline-none placeholder-[#55556C] focus:border-[#D4AF37] transition-colors"
-        />
+      {mentionError && (
+        <div className="px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 flex items-center justify-between">
+          <span>{mentionError}</span>
+          <button
+            type="button"
+            onClick={() => setMentionError(null)}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
-        <textarea
-          id="editor-manuscript-textarea"
-          ref={textareaRef}
-          value={content}
-          onChange={handleContentChange}
-          placeholder="Mulai tuliskan kisah petualangan, dialog menegangkan, atau monolog karaktermu di sini..."
-          style={{
-            fontFamily:
-              fontFamily === 'serif'
-                ? "'Cinzel', serif, Georgia, 'Times New Roman'"
-                : fontFamily === 'mono'
-                ? "'JetBrains Mono', monospace"
-                : "'Plus Jakarta Sans', sans-serif",
-            fontSize: `${fontSize}px`,
-            lineHeight: lineSpacing,
-          }}
-          className="w-full flex-1 bg-transparent text-[#E0E0E0] outline-none resize-none placeholder-[#4E4E66] selection:bg-[#D4AF37]/30 min-h-[480px]"
-          autoFocus
-        />
+      <div
+        className={`flex flex-col ${
+          isMentionPanelOpen
+            ? "lg:flex-row"
+            : ""
+        } gap-4`}
+      >
+        <div className="relative flex flex-col flex-1 min-w-0 bg-[#1A1A28] border border-[#2A2A3C] rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-2xl min-h-[34rem]">
+          <div className="flex items-center justify-between gap-3 mb-5">
+            <input
+              id="editor-chapter-title-input"
+              type="text"
+              value={chapterTitle}
+              onChange={(event) => {
+                const nextTitle =
+                  event.target.value;
+                setChapterTitle(nextTitle);
+                titleRef.current = nextTitle;
+                markUnsaved();
+              }}
+              placeholder="Judul Bab..."
+              className="flex-1 font-editorial text-2xl sm:text-3xl font-bold text-[#FAF7EE] bg-transparent border-b border-[#2A2A3C] pb-3 outline-none placeholder-[#55556C] focus:border-[#D4AF37]"
+            />
+
+            <div className="hidden sm:block text-right text-[10px] text-[#66667D]">
+              <div>
+                {formatUserDateTime(
+                  Date.now(),
+                  false
+                )}
+              </div>
+              <div>
+                {userTimeZone}
+              </div>
+            </div>
+          </div>
+
+          {isPreviewOpen ? (
+            <div
+              className="flex-1 overflow-y-auto rounded-xl border border-[#2A2A3C] bg-[#161624] p-6"
+              style={{
+                fontFamily: editorFontFamily,
+                fontSize: `${fontSize}px`,
+                lineHeight: lineSpacing,
+              }}
+            >
+              <MarkdownPreview
+                content={content}
+              />
+            </div>
+          ) : (
+            <textarea
+              id="editor-manuscript-textarea"
+              ref={textareaRef}
+              value={content}
+              onChange={handleContentChange}
+              placeholder="Mulai tuliskan kisah petualangan, dialog menegangkan, atau monolog karaktermu di sini..."
+              spellCheck={false}
+              className="flex-1 w-full min-h-[30rem] bg-transparent outline-none resize-none text-[#FAF7EE] placeholder-[#4E4E66] selection:bg-[#D4AF37]/40"
+              style={{
+                fontFamily: editorFontFamily,
+                fontSize: `${fontSize}px`,
+                lineHeight: lineSpacing,
+              }}
+              autoFocus
+            />
+          )}
+        </div>
+
+        {isMentionPanelOpen && (
+          <CharacterMentionPanel
+            characters={activeBookCharacters}
+            mentions={mentions}
+            content={content}
+            disabled={mentionOperationLoading}
+            onNavigate={handleNavigateToMention}
+            onRemove={handleRemoveMention}
+            onClose={() =>
+              setIsMentionPanelOpen(false)
+            }
+          />
+        )}
       </div>
 
       {isHistoryDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-[#1E1E2E] border-l border-[#2A2A3C] h-full p-6 flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-[#1E1E2E] border-l border-[#2A2A3C] h-full p-6 flex flex-col shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-[#2A2A3C] mb-4">
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-[#D4AF37]" />
@@ -714,58 +2148,77 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
                   Brankas Draft Darurat
                 </h3>
               </div>
+
               <button
-                onClick={() => setIsHistoryDrawerOpen(false)}
-                className="p-1 text-[#8E8EA4] hover:text-[#FAF7EE] rounded-lg"
+                type="button"
+                onClick={() =>
+                  setIsHistoryDrawerOpen(false)
+                }
+                className="p-1 text-[#8E8EA4]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <p className="text-xs text-[#8E8EA4] mb-4">
-              Novel's Creator secara otomatis mengamankan snapshot naskahmu. Jika kamu salah menghapus teks, pulihkan versi sebelumnya dengan satu klik:
+              Snapshot menggunakan tanggal dan
+              waktu yang ditampilkan dalam zona waktu
+              perangkat pengguna.
             </p>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {snapshots.length === 0 ? (
-                <div className="py-12 text-center text-[#6E6E85]">
-                  <p className="text-xs">Belum ada riwayat snapshot untuk bab ini.</p>
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {activeSnapshotsLoading ? (
+                <div className="py-12 text-center text-xs text-[#6E6E85]">
+                  Memuat riwayat...
+                </div>
+              ) : activeSnapshots.length === 0 ? (
+                <div className="py-12 text-center text-xs text-[#6E6E85]">
+                  Belum ada snapshot.
                 </div>
               ) : (
-                snapshots.map((snap) => (
+                activeSnapshots.map((snapshot) => (
                   <div
-                    key={snap.id}
-                    className="p-3.5 bg-[#161624] border border-[#2A2A3C] hover:border-[#D4AF37]/50 rounded-xl space-y-2 transition-colors"
+                    key={snapshot.id}
+                    className="p-3.5 bg-[#161624] border border-[#2A2A3C] rounded-xl space-y-2"
                   >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-mono text-[#D4AF37] font-semibold">
-                        {new Date(snap.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })}
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[#D4AF37] text-xs">
+                        {formatUserDateTime(
+                          snapshot.timestamp
+                        )}
                       </span>
-                      <span className="text-[11px] text-[#8E8EA4] font-mono">
-                        {snap.wordCount} kata
+                      <span className="text-[11px] text-[#8E8EA4]">
+                        {snapshot.wordCount} kata
                       </span>
                     </div>
 
-                    {snap.reason && (
+                    {snapshot.reason && (
                       <div className="text-[11px] text-[#A0A0B5] italic">
-                        {snap.reason}
+                        {snapshot.reason}
                       </div>
                     )}
 
-                    <p className="text-xs text-[#7E7E94] line-clamp-2 bg-[#12121C] p-2 rounded border border-[#222234]">
-                      {snap.content.slice(0, 120)}...
+                    <p className="text-xs text-[#7E7E94] line-clamp-3 bg-[#12121C] p-2 rounded">
+                      {snapshot.content.slice(
+                        0,
+                        160
+                      )}
+                      {snapshot.content.length > 160
+                        ? "..."
+                        : ""}
                     </p>
 
                     <button
-                      onClick={() => handleRestoreSnapshot(snap)}
-                      className="w-full py-1.5 px-3 bg-[#242438] hover:bg-[#D4AF37] hover:text-[#121212] text-xs font-semibold text-[#FAF7EE] rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      type="button"
+                      onClick={() =>
+                        void handleRestoreSnapshot(
+                          snapshot
+                        )
+                      }
+                      className="w-full py-1.5 px-3 bg-[#242438] hover:bg-[#D4AF37] hover:text-[#121212] text-xs font-semibold text-[#FAF7EE] rounded-lg flex items-center justify-center gap-1.5"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Pulihkan Versi Ini</span>
+                      Pulihkan Versi Ini
                     </button>
                   </div>
                 ))
@@ -777,3 +2230,5 @@ export const NovelEditorView: React.FC<NovelEditorViewProps> = ({
     </div>
   );
 };
+
+export default NovelEditorView;

@@ -1,68 +1,321 @@
 @import "tailwindcss";
 
-@theme {
-  --font-serif: 'Cormorant Garamond', 'Cinzel', serif, Georgia, Cambria, 'Times New Roman', Times, serif;
-  --font-display: 'Cinzel', 'Cormorant Garamond', serif;
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace, Consolas, Monaco, monospace;
-}
-
 @layer base {
   :root {
-    --font-serif: 'Cormorant Garamond', 'Cinzel', serif, Georgia, Cambria, 'Times New Roman', Times, serif;
-    --font-display: 'Cinzel', 'Cormorant Garamond', serif;
-    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace, Consolas, Monaco, monospace;
+    --font-serif:
+      'Cormorant Garamond',
+      'Cinzel',
+      serif,
+      Georgia,
+      Cambria,
+      'Times New Roman',
+      Times,
+      serif;
+
+    --font-display:
+      'Cinzel',
+      'Cormorant Garamond',
+      serif;
+
+    --font-sans:
+      'Plus Jakarta Sans',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+
+    --font-mono:
+      'JetBrains Mono',
+      monospace,
+      Consolas,
+      Monaco,
+      monospace;
   }
 
   body {
-    font-family: var(--font-sans);
-    background-color: #121212;
-    color: #E0E0E0;
-    overflow-x: hidden;
+    font-family:
+      var(--font-sans);
+
+    background-color:
+      #121212;
+
+    color:
+      #E0E0E0;
+
+    overflow-x:
+      hidden;
   }
 
-  h1, h2, h3, .font-serif {
-    font-family: var(--font-serif);
+  h1,
+  h2,
+  h3,
+  .font-serif {
+    font-family:
+      var(--font-serif);
   }
 
-  .font-editorial, .font-display {
-    font-family: var(--font-display);
+  .font-editorial,
+  .font-display {
+    font-family:
+      var(--font-display);
   }
 }
 
-/* Custom Scrollbar for Dark Editorial Theme */
+
+/* ============================================================
+   CUSTOM SCROLLBAR
+   ============================================================ */
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #151520;
+  background:
+    #151520;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2A2A3C;
-  border-radius: 4px;
+  background:
+    #2A2A3C;
+
+  border-radius:
+    4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #D4AF37;
+  background:
+    #D4AF37;
 }
 
-/* Subtle Gold Glow Animations */
+
+/* ============================================================
+   GOLD GLOW
+   ============================================================ */
+
 @keyframes pulseGold {
-  0%, 100% {
-    box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
-    border-color: rgba(212, 175, 55, 0.4);
+  0%,
+  100% {
+    box-shadow:
+      0 0 15px
+      rgba(
+        212,
+        175,
+        55,
+        0.2
+      );
+
+    border-color:
+      rgba(
+        212,
+        175,
+        55,
+        0.4
+      );
   }
+
   50% {
-    box-shadow: 0 0 25px rgba(212, 175, 55, 0.45);
-    border-color: rgba(212, 175, 55, 0.8);
+    box-shadow:
+      0 0 25px
+      rgba(
+        212,
+        175,
+        55,
+        0.45
+      );
+
+    border-color:
+      rgba(
+        212,
+        175,
+        55,
+        0.8
+      );
   }
 }
 
 .animate-gold-pulse {
-  animation: pulseGold 3s infinite ease-in-out;
+  animation:
+    pulseGold
+    3s
+    infinite
+    ease-in-out;
 }
 
+
+/* ============================================================
+   LUCIDE ICONS
+   ============================================================ */
+
+/*
+ * JANGAN menggunakan selector:
+ *
+ * [aria-hidden="true"]
+ *
+ * karena icon Lucide juga menggunakan aria-hidden="true".
+ *
+ * Icon harus tetap terlihat walaupun memiliki aria-hidden.
+ */
+
+svg.lucide {
+  display:
+    block !important;
+
+  flex-shrink:
+    0;
+
+  overflow:
+    visible;
+
+  stroke:
+    currentColor !important;
+}
+
+svg.lucide path,
+svg.lucide circle,
+svg.lucide line,
+svg.lucide polyline,
+svg.lucide polygon,
+svg.lucide rect {
+  stroke:
+    currentColor !important;
+}
+
+
+/* ============================================================
+   STUDIO EDITOR
+   ============================================================ */
+
+/*
+ * Hanya highlight layer mention yang dibuat transparan.
+ *
+ * JANGAN menggunakan:
+ *
+ * #novel-editor-container [aria-hidden="true"]
+ *
+ * karena selector tersebut juga akan mengenai icon Lucide.
+ */
+
+.editor-mention-highlight-layer {
+  color:
+    transparent !important;
+
+  -webkit-text-fill-color:
+    transparent !important;
+
+  user-select:
+    none !important;
+
+  pointer-events:
+    none !important;
+}
+
+
+/* ============================================================
+   REAL TEXTAREA
+   ============================================================ */
+
+#editor-manuscript-textarea {
+  color:
+    #FAF7EE !important;
+
+  -webkit-text-fill-color:
+    #FAF7EE !important;
+
+  caret-color:
+    #FAF7EE !important;
+
+  text-decoration:
+    none !important;
+
+  -webkit-text-decoration:
+    none !important;
+
+  text-rendering:
+    optimizeLegibility;
+
+  box-sizing:
+    border-box;
+
+  outline:
+    none !important;
+
+  white-space:
+    pre-wrap;
+
+  overflow-wrap:
+    break-word;
+
+  word-break:
+    normal;
+}
+
+
+/* ============================================================
+   TEXT SELECTION
+   ============================================================ */
+
+#editor-manuscript-textarea::selection {
+  color:
+    #FAF7EE !important;
+
+  -webkit-text-fill-color:
+    #FAF7EE !important;
+
+  background:
+    rgba(
+      212,
+      175,
+      55,
+      0.32
+    ) !important;
+}
+
+#editor-manuscript-textarea::-moz-selection {
+  color:
+    #FAF7EE !important;
+
+  background:
+    rgba(
+      212,
+      175,
+      55,
+      0.32
+    ) !important;
+}
+
+
+/* ============================================================
+   FOCUS
+   ============================================================ */
+
+#editor-manuscript-textarea:focus {
+  outline:
+    none !important;
+}
+
+
+/* ============================================================
+   SPELLCHECK / TEXT DECORATION
+   ============================================================ */
+
+/*
+ * Garis merah spellcheck dikontrol oleh browser,
+ * sehingga CSS tidak selalu dapat mematikannya.
+ *
+ * Pastikan textarea juga memiliki:
+ *
+ * spellCheck={false}
+ *
+ * di NovelEditorView.tsx.
+ */
+
+#editor-manuscript-textarea {
+  text-decoration-line:
+    none !important;
+
+  -webkit-text-decoration-line:
+    none !important;
+}

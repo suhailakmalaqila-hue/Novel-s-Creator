@@ -16,8 +16,7 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-interface ApiRequestOptions
-  extends RequestInit {
+interface ApiRequestOptions extends RequestInit {
   auth?: boolean;
 }
 
@@ -33,19 +32,6 @@ export async function apiRequest<T>(
 
   const token = getToken();
 
-  /* Kode lama (belum fix)
-  const requestHeaders: HeadersInit = {
-    "Content-Type": "application/json",
-    ...headers,
-  };
-
-  if (auth && token) {
-    requestHeaders.Authorization =
-      `Bearer ${token}`;
-  }
-      */
-
-  // KODE BARU (SUDAH FIX)
   const requestHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...(headers as Record<string, string>),
@@ -54,7 +40,7 @@ export async function apiRequest<T>(
   if (auth && token) {
     requestHeaders["Authorization"] = `Bearer ${token}`;
   }
-    
+
   const response = await fetch(
     `${API_URL}${endpoint}`,
     {
@@ -72,13 +58,33 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
+    /*
+     * 401 hanya digunakan untuk masalah autentikasi/session,
+     * misalnya:
+     * - token tidak valid
+     * - token expired
+     * - token tidak dapat diverifikasi
+     * - endpoint protected dipanggil tanpa autentikasi
+     *
+     * Jika response 401, session lokal dibersihkan agar
+     * aplikasi tidak terus menggunakan token yang sudah tidak valid.
+     */
     if (response.status === 401) {
       clearToken();
-      localStorage.removeItem(
-        "auth_user"
-      );
+      localStorage.removeItem("auth_user");
     }
 
+    /*
+     * Error 400, 403, 404, 409, 500, dan status lainnya
+     * tidak menghapus token.
+     *
+     * Contohnya:
+     * - 400: password saat ini salah
+     * - 403: user tidak memiliki hak akses
+     * - 404: resource tidak ditemukan
+     * - 409: konflik data
+     * - 500: kesalahan server
+     */
     throw new Error(
       result?.message ||
         "Terjadi kesalahan pada server"

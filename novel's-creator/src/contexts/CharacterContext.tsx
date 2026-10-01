@@ -2,11 +2,14 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
+  useRef,
   useState,
 } from "react";
 
 import {
   CharacterWiki,
+  CharacterMention,
 } from "../types";
 
 import {
@@ -14,6 +17,7 @@ import {
   RelationshipInput,
   CustomAttributeInput,
   CharacterMentionInput,
+  CharacterMentionUpdateInput,
 
   getCharacters,
   createCharacter,
@@ -30,8 +34,11 @@ import {
 
   getMentions,
   createMention,
+  updateMention,
   deleteMention,
 } from "../services/character.service";
+
+import { useAuth } from "./AuthContext";
 
 interface CharacterContextValue {
   characters: CharacterWiki[];
@@ -88,7 +95,7 @@ interface CharacterContextValue {
     attributeId: string
   ) => Promise<void>;
 
-  mentions: any[];
+  mentions: CharacterMention[];
 
   refreshMentions: (
     bookId: string,
@@ -99,7 +106,14 @@ interface CharacterContextValue {
     bookId: string,
     chapterId: string,
     input: CharacterMentionInput
-  ) => Promise<void>;
+  ) => Promise<CharacterMention>;
+
+  editMention: (
+    bookId: string,
+    chapterId: string,
+    mentionId: string,
+    input: CharacterMentionUpdateInput
+  ) => Promise<CharacterMention>;
 
   removeMention: (
     bookId: string,
@@ -116,6 +130,11 @@ const CharacterContext =
 export const CharacterProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
+  const {
+    user,
+    isAuthenticated,
+  } = useAuth();
+
   const [characters, setCharacters] =
     useState<CharacterWiki[]>([]);
 
@@ -126,51 +145,257 @@ export const CharacterProvider: React.FC<{
     useState<string | null>(null);
 
   const [mentions, setMentions] =
-    useState<any[]>([]);
+    useState<CharacterMention[]>([]);
 
+  /**
+   * Tracker requestId berpandukan scope (bookId atau "__all__")
+   */
+  const characterRequestIdRef =
+    useRef<Record<string, number>>({});
+
+  /**
+   * Identity user yang sedang aktif.
+   */
+  const activeUserIdRef =
+    useRef<string | null>(null);
+
+  /**
+   * RESET KETIKA IDENTITY USER BERUBAH
+   */
+  useEffect(() => {
+    const nextUserId =
+      isAuthenticated && user?.id
+        ? user.id
+        : null;
+
+    const previousUserId =
+      activeUserIdRef.current;
+
+    if (
+      previousUserId ===
+      nextUserId
+    ) {
+      return;
+    }
+
+    activeUserIdRef.current =
+      nextUserId;
+
+    /**
+     * Kosongkan semua request tracker apabila user bertukar
+     */
+    characterRequestIdRef.current = {};
+
+    setCharacters([]);
+    setMentions([]);
+    setError(null);
+
+    if (!nextUserId) {
+      setLoading(false);
+    }
+  }, [
+    isAuthenticated,
+    user?.id,
+  ]);
+
+  /**
+   * REFRESH CHARACTERS
+   */
   const refreshCharacters =
-    useCallback(async (bookId?: string) => {
-      try {
-        setLoading(true);
-        setError(null);
+    useCallback(
+      async (bookId?: string) => {
+        const currentUserId =
+          activeUserIdRef.current;
 
-        const data =
-          await getCharacters(bookId);
+        if (
+          !isAuthenticated ||
+          !user?.id ||
+          !currentUserId
+        ) {
+          setCharacters([]);
+          setLoading(false);
+          return;
+        }
 
-        setCharacters(data);
-      } catch (err: any) {
-        console.error(
-          "Gagal mengambil characters:",
-          err
-        );
+        if (
+          currentUserId !==
+          user.id
+        ) {
+          return;
+        }
 
-        setError(
-          err?.message ??
+        const requestKey = bookId ?? "__all__";
+
+        const requestId =
+          (characterRequestIdRef.current[requestKey] ?? 0) + 1;
+
+        characterRequestIdRef.current[requestKey] =
+          requestId;
+
+        try {
+          setLoading(true);
+          setError(null);
+
+          const data =
+            await getCharacters(bookId);
+
+          if (
+            requestId !==
+            characterRequestIdRef.current[requestKey]
+          ) {
+            return;
+          }
+
+          if (
+            activeUserIdRef.current !==
+            user.id
+          ) {
+            return;
+          }
+
+          const incoming = Array.isArray(data) ? data : [];
+
+          if (!bookId) {
+            // Request Wiki Global
+            setCharacters(incoming);
+            return;
+          }
+
+          // Request khusus buku: Penyelarasan (reconciliation)
+          setCharacters((previous) => {
+            const incomingById = new Map(
+              incoming.map((character) => [
+                character.id,
+                character,
+              ])
+            );
+
+            const previousIds = new Set(
+              previous.map((character) => character.id)
+            );
+
+            const next = previous.map((character) => {
+              const fresh = incomingById.get(character.id);
+
+              if (fresh) {
+                return fresh;
+              }
+
+              if (character.bookIds?.includes(bookId)) {
+                return {
+                  ...character,
+                  bookIds: character.bookIds.filter(
+                    (id) => id !== bookId
+                  ),
+                };
+              }
+
+              return character;
+            });
+
+            for (const character of incoming) {
+              if (!previousIds.has(character.id)) {
+                next.push(character);
+              }
+            }
+
+            return next;
+          });
+        } catch (err: any) {
+          if (
+            requestId !==
+            characterRequestIdRef.current[requestKey]
+          ) {
+            return;
+          }
+
+          if (
+            activeUserIdRef.current !==
+            user.id
+          ) {
+            return;
+          }
+
+          console.error(
+            "Gagal mengambil characters:",
+            err
+          );
+
+          setError(
+            err?.message ??
             "Gagal mengambil characters"
-        );
+          );
 
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    }, []);
+          setCharacters([]);
 
+          throw err;
+        } finally {
+          if (
+            requestId ===
+            characterRequestIdRef.current[requestKey]
+          ) {
+            setLoading(false);
+          }
+        }
+      },
+      [
+        isAuthenticated,
+        user?.id,
+      ]
+    );
+
+  /**
+   * INITIAL LOAD / USER CHANGE
+   */
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      !user?.id
+    ) {
+      return;
+    }
+
+    void refreshCharacters();
+  }, [
+    isAuthenticated,
+    user?.id,
+    refreshCharacters,
+  ]);
+
+  /**
+   * ADD CHARACTER
+   */
   const addCharacter =
     useCallback(
-      async (input: CharacterInput) => {
+      async (
+        input: CharacterInput
+      ) => {
         const character =
           await createCharacter(input);
 
-        setCharacters((prev) => [
-          character,
-          ...prev,
-        ]);
+        if (
+          isAuthenticated &&
+          user?.id &&
+          activeUserIdRef.current ===
+          user.id
+        ) {
+          setCharacters((prev) => [
+            character,
+            ...prev,
+          ]);
+        }
 
         return character;
       },
-      []
+      [
+        isAuthenticated,
+        user?.id,
+      ]
     );
 
+  /**
+   * EDIT CHARACTER
+   */
   const editCharacter =
     useCallback(
       async (
@@ -183,22 +408,37 @@ export const CharacterProvider: React.FC<{
             input
           );
 
-        setCharacters((prev) =>
-          prev.map((item) =>
-            item.id === characterId
-              ? character
-              : item
-          )
-        );
+        if (
+          isAuthenticated &&
+          user?.id &&
+          activeUserIdRef.current ===
+          user.id
+        ) {
+          setCharacters((prev) =>
+            prev.map((item) =>
+              item.id === characterId
+                ? character
+                : item
+            )
+          );
+        }
 
         return character;
       },
-      []
+      [
+        isAuthenticated,
+        user?.id,
+      ]
     );
 
+  /**
+   * DELETE CHARACTER
+   */
   const removeCharacter =
     useCallback(
-      async (characterId: string) => {
+      async (
+        characterId: string
+      ) => {
         await deleteCharacter(
           characterId
         );
@@ -213,6 +453,9 @@ export const CharacterProvider: React.FC<{
       []
     );
 
+  /**
+   * ADD RELATIONSHIP
+   */
   const addRelationship =
     useCallback(
       async (
@@ -224,14 +467,16 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * EDIT RELATIONSHIP
+   */
   const editRelationship =
     useCallback(
       async (
@@ -245,14 +490,16 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * DELETE RELATIONSHIP
+   */
   const removeRelationship =
     useCallback(
       async (
@@ -264,14 +511,16 @@ export const CharacterProvider: React.FC<{
           relationshipId
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * ADD CUSTOM ATTRIBUTE
+   */
   const addCustomAttribute =
     useCallback(
       async (
@@ -283,14 +532,16 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * EDIT CUSTOM ATTRIBUTE
+   */
   const editCustomAttribute =
     useCallback(
       async (
@@ -304,14 +555,16 @@ export const CharacterProvider: React.FC<{
           input
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * DELETE CUSTOM ATTRIBUTE
+   */
   const removeCustomAttribute =
     useCallback(
       async (
@@ -323,29 +576,51 @@ export const CharacterProvider: React.FC<{
           attributeId
         );
 
-        const updated =
-          await getCharacters();
-
-        setCharacters(updated);
+        await refreshCharacters();
       },
-      []
+      [
+        refreshCharacters,
+      ]
     );
 
+  /**
+   * MENTIONS
+   */
   const refreshMentions =
     useCallback(
       async (
         bookId: string,
         chapterId: string
       ) => {
+        if (
+          !isAuthenticated ||
+          !user?.id ||
+          activeUserIdRef.current !==
+          user.id
+        ) {
+          setMentions([]);
+          return;
+        }
+
         const data =
           await getMentions(
             bookId,
             chapterId
           );
 
+        if (
+          activeUserIdRef.current !==
+          user.id
+        ) {
+          return;
+        }
+
         setMentions(data);
       },
-      []
+      [
+        isAuthenticated,
+        user?.id,
+      ]
     );
 
   const addMention =
@@ -362,12 +637,57 @@ export const CharacterProvider: React.FC<{
             input
           );
 
-        setMentions((prev) => [
-          ...prev,
-          mention,
-        ]);
+        if (
+          activeUserIdRef.current ===
+          user?.id
+        ) {
+          setMentions((prev) => [
+            ...prev,
+            mention,
+          ]);
+        }
+
+        return mention;
       },
-      []
+      [
+        user?.id,
+      ]
+    );
+
+  const editMention =
+    useCallback(
+      async (
+        bookId: string,
+        chapterId: string,
+        mentionId: string,
+        input: CharacterMentionUpdateInput
+      ) => {
+        const mention =
+          await updateMention(
+            bookId,
+            chapterId,
+            mentionId,
+            input
+          );
+
+        if (
+          activeUserIdRef.current ===
+          user?.id
+        ) {
+          setMentions((prev) =>
+            prev.map((item) =>
+              item.id === mentionId
+                ? mention
+                : item
+            )
+          );
+        }
+
+        return mention;
+      },
+      [
+        user?.id,
+      ]
     );
 
   const removeMention =
@@ -416,6 +736,7 @@ export const CharacterProvider: React.FC<{
         mentions,
         refreshMentions,
         addMention,
+        editMention,
         removeMention,
       }}
     >

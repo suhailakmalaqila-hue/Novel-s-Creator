@@ -3,10 +3,13 @@ import { Router } from "express";
 import {
   listMentions,
   addMention,
+  editMention,
   removeMention,
 } from "../controllers/mention.controller";
 
-import { authMiddleware } from "../middleware/auth.middleware";
+import {
+  authMiddleware,
+} from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -20,6 +23,11 @@ router.get(
 router.post(
   "/books/:bookId/chapters/:chapterId/mentions",
   addMention
+);
+
+router.patch(
+  "/books/:bookId/chapters/:chapterId/mentions/:mentionId",
+  editMention
 );
 
 router.delete(

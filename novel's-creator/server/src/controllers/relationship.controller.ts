@@ -1,7 +1,7 @@
 import { Response } from "express";
 
 import {
-  AuthenticatedRequest,
+  AuthRequest,
 } from "../middleware/auth.middleware";
 
 import {
@@ -12,7 +12,7 @@ import {
 } from "../services/relationship.service";
 
 export async function listRelationships(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -24,7 +24,7 @@ export async function listRelationships(
 
     const result = await getRelationships(
       req.params.characterId,
-      req.user.userId
+      req.user.id
     );
 
     if (result === null) {
@@ -44,7 +44,7 @@ export async function listRelationships(
 }
 
 export async function addRelationship(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -67,7 +67,7 @@ export async function addRelationship(
     const relationship =
       await createRelationship(
         req.params.characterId,
-        req.user.userId,
+        req.user.id,
         req.body
       );
 
@@ -108,7 +108,7 @@ export async function addRelationship(
 }
 
 export async function editRelationship(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -121,7 +121,7 @@ export async function editRelationship(
     const relationship =
       await updateRelationship(
         req.params.relationshipId,
-        req.user.userId,
+        req.user.id,
         req.body
       );
 
@@ -162,7 +162,7 @@ export async function editRelationship(
 }
 
 export async function removeRelationship(
-  req: AuthenticatedRequest,
+  req: AuthRequest,
   res: Response
 ) {
   try {
@@ -175,7 +175,7 @@ export async function removeRelationship(
     const deleted =
       await deleteRelationship(
         req.params.relationshipId,
-        req.user.userId
+        req.user.id
       );
 
     if (!deleted) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Chapter, ChapterStatus } from '../../types';
 import { X, FileText, Plus } from 'lucide-react';
 
@@ -19,15 +19,28 @@ export const ChapterModal: React.FC<ChapterModalProps> = ({
   onClose,
   onSave,
 }) => {
-  const [title, setTitle] = useState(initialChapter?.title || '');
-  const [chapterNumber, setChapterNumber] = useState(
-    initialChapter?.chapterNumber || existingChaptersCount + 1
-  );
-  const [status, setStatus] = useState<ChapterStatus>(
-    initialChapter?.status || 'draft'
-  );
+  const [title, setTitle] = useState('');
+  const [chapterNumber, setChapterNumber] = useState(1);
+  const [status, setStatus] = useState<ChapterStatus>('draft');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setTitle(initialChapter?.title || '');
+    setChapterNumber(
+      initialChapter?.chapterNumber || existingChaptersCount + 1
+    );
+    setStatus(initialChapter?.status || 'draft');
+    setErrorMsg(null);
+  }, [
+    isOpen,
+    initialChapter,
+    existingChaptersCount,
+    bookId,
+  ]);
+
+  // JIKA MODAL DALAM KEADAAN TUTUP, JANGAN RENDER APAPUN
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -74,6 +87,7 @@ export const ChapterModal: React.FC<ChapterModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-2 text-[#7E7E94] hover:text-[#FAF7EE] hover:bg-[#252538] rounded-xl transition-colors cursor-pointer"
           >
@@ -141,7 +155,7 @@ export const ChapterModal: React.FC<ChapterModalProps> = ({
             </button>
             <button
               type="submit"
-              className="py-2 px-5 bg-gradient-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-xs rounded-xl flex items-center gap-1.5 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
+              className="py-2 px-5 bg-linear-to-r from-[#D4AF37] to-[#B89225] hover:from-[#E2BE4B] hover:to-[#C9A332] text-[#121212] font-semibold text-xs rounded-xl flex items-center gap-1.5 shadow-lg shadow-[#D4AF37]/20 transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>{initialChapter ? 'Simpan Bab' : 'Buat Bab'}</span>

@@ -171,14 +171,33 @@ export const TUTORIAL_DUMMY_CHARACTERS: CharacterWiki[] = [
 export const TUTORIAL_DUMMY_QUICK_NOTES: QuickNote[] = [
   {
     id: 'tut-dummy-note-01',
+
     title: 'Plot Twist Bab 5: Ramalan Gerhana',
+
     content:
       'Ternyata pedang surya dan segel bayangan harus disatukan pada malam gerhana untuk membuka gerbang dimensi kuno.',
+
     category: 'Plot Hole',
+
+    /**
+     * Dummy note ini contoh
+     * contextual note ke BOOK.
+     */
+    noteScope: 'book',
+
+    bookId:
+      TUTORIAL_DUMMY_BOOK_ID,
+
     colorTag: '#D4AF37',
+
     isPinned: true,
-    bookId: TUTORIAL_DUMMY_BOOK_ID,
-    createdAt: Date.now() - 172800000,
-    updatedAt: Date.now() - 86400000,
+
+    createdAt:
+      Date.now() -
+      172800000,
+
+    updatedAt:
+      Date.now() -
+      86400000,
   },
 ];

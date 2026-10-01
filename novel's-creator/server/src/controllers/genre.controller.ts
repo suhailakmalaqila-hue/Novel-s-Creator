@@ -1,4 +1,5 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 import {
   getAllGenres,
@@ -8,7 +9,7 @@ import {
 } from "../services/genre.service";
 
 export async function getGenres(
-  _req: Request,
+  _req: AuthRequest,
   res: Response
 ) {
   try {
@@ -29,20 +30,20 @@ export async function getGenres(
 }
 
 export async function addGenre(
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) {
   try {
     const { name } = req.body;
 
-    if (!name) {
+    if (!name || typeof name !== "string" || !name.trim()) {
       return res.status(400).json({
         success: false,
         message: "Nama genre wajib diisi",
       });
     }
 
-    const genre = await createGenre(name);
+    const genre = await createGenre(name.trim());
 
     return res.status(201).json({
       success: true,
@@ -60,16 +61,32 @@ export async function addGenre(
 }
 
 export async function attachGenreToBook(
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) {
   try {
+    const userId = req.user?.id;
     const { bookId, genreId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
 
     const relation = await addGenreToBook(
       bookId,
-      genreId
+      genreId,
+      userId
     );
+
+    if (!relation) {
+      return res.status(404).json({
+        success: false,
+        message: "Buku atau genre tidak ditemukan",
+      });
+    }
 
     return res.status(201).json({
       success: true,
@@ -87,15 +104,24 @@ export async function attachGenreToBook(
 }
 
 export async function detachGenreFromBook(
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) {
   try {
+    const userId = req.user?.id;
     const { bookId, genreId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Tidak terautentikasi",
+      });
+    }
 
     const relation = await removeGenreFromBook(
       bookId,
-      genreId
+      genreId,
+      userId
     );
 
     if (!relation) {

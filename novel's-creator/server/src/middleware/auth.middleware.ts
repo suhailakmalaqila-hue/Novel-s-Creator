@@ -1,88 +1,92 @@
-import { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import pool from '../config/database';
 
-export interface AuthenticatedRequest
-  extends Request {
+export interface AuthRequest extends Request {
   user?: {
-    userId: string;
+    id: string;
     email: string;
     role: string;
   };
 }
 
-export function authMiddleware(
-  req: AuthenticatedRequest,
+export const authMiddleware = async (
+  req: AuthRequest,
   res: Response,
   next: NextFunction
-) {
-  const authorization =
-    req.headers.authorization;
-
-  if (!authorization) {
-    return res.status(401).json({
-      success: false,
-      message: "Token autentikasi tidak ditemukan",
-    });
-  }
-
-  const [type, token] =
-    authorization.split(" ");
-
-  if (
-    type !== "Bearer" ||
-    !token
-  ) {
-    return res.status(401).json({
-      success: false,
-      message:
-        "Format Authorization tidak valid",
-    });
-  }
-
-  const secret = process.env.JWT_SECRET || "novels_creator_super_secret_key_change_this";
-
-  if (!secret) {
-    console.error(
-      "JWT_SECRET belum dikonfigurasi"
-    );
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Konfigurasi authentication bermasalah",
-    });
-  }
-
+) => {
   try {
-    const decoded = jwt.verify(
-      token,
-      secret
-    );
+    const authHeader = req.headers.authorization;
 
-    if (
-      typeof decoded !== "object" ||
-      !decoded.userId ||
-      !decoded.email ||
-      !decoded.role
-    ) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({
-        success: false,
-        message: "Token tidak valid",
+        message: 'Authentication required'
       });
     }
 
+    const token = authHeader.substring(7);
+
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+      throw new Error('JWT_SECRET is not configured');
+    }
+
+    const decoded = jwt.verify(token, secret) as {
+      userId: string;
+    };
+
+    const result = await pool.query(
+      `
+      SELECT id, email, role
+      FROM users
+      WHERE id = $1
+      `,
+      [decoded.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        message: 'User account not found'
+      });
+    }
+
+    const user = result.rows[0];
+
     req.user = {
-      userId: decoded.userId,
-      email: decoded.email,
-      role: decoded.role,
+      id: user.id,
+      email: user.email,
+      role: user.role
     };
 
     next();
   } catch (error) {
+    console.error('Authentication error:', error);
+
     return res.status(401).json({
-      success: false,
-      message:
-        "Token tidak valid atau sudah kedaluwarsa",
+      message: 'Invalid or expired authentication token'
     });
   }
-}
+};
+
+export const requireRole = (...roles: string[]) => {
+  return (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    if (!req.user) {
+      return res.status(401).json({
+        message: 'Authentication required'
+      });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        message: 'Forbidden'
+      });
+    }
+
+    next();
+  };
+};

@@ -2,22 +2,17 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import pool from "../config/database";
 
-type RegisterData = {
-  email: string;
-  password: string;
-  authorName?: string;
-  penName?: string;
-};
-
 function generateToken(user: {
   id: string;
   email: string;
   role: string;
 }) {
-  const secret = process.env.JWT_SECRET || "novels_creator_super_secret_key_change_this";
+  const secret = process.env.JWT_SECRET;
 
   if (!secret) {
-    throw new Error("JWT_SECRET belum dikonfigurasi");
+    throw new Error(
+      "JWT_SECRET belum dikonfigurasi"
+    );
   }
 
   return jwt.sign(
@@ -33,62 +28,25 @@ function generateToken(user: {
   );
 }
 
-export async function registerUser(data: RegisterData) {
-  const existingUser = await pool.query(
-    `
-    SELECT id
-    FROM users
-    WHERE email = $1
-    `,
-    [data.email]
-  );
-
-  if (existingUser.rows.length > 0) {
-    throw new Error("EMAIL_ALREADY_EXISTS");
-  }
-
-  const passwordHash = await bcrypt.hash(data.password, 12);
-
-  const result = await pool.query(
-    `
-    INSERT INTO users (
-      email,
-      password_hash,
-      author_name,
-      pen_name
-    )
-    VALUES ($1, $2, $3, $4)
-    RETURNING
-      id,
-      email,
-      role,
-      author_name,
-      pen_name,
-      created_at,
-      updated_at
-    `,
-    [
-      data.email,
-      passwordHash,
-      data.authorName ?? null,
-      data.penName ?? null,
-    ]
-  );
-
-  const user = result.rows[0];
-
-  const token = generateToken(user);
-
-  return {
-    user,
-    token,
-  };
-}
-
+/**
+ * Public registration is intentionally not implemented.
+ *
+ * Account creation belongs to the Admin user-management module:
+ *
+ * Admin Dashboard
+ *      -> POST /api/admin/users
+ *      -> user.service.ts
+ *      -> users
+ *
+ * This service therefore contains authentication only.
+ */
 export async function loginUser(
   email: string,
   password: string
 ) {
+  const normalizedEmail =
+    email.trim().toLowerCase();
+
   const result = await pool.query(
     `
     SELECT
@@ -110,27 +68,33 @@ export async function loginUser(
       created_at,
       updated_at
     FROM users
-    WHERE email = $1
+    WHERE LOWER(email) = $1
     `,
-    [email]
+    [normalizedEmail]
   );
 
   if (result.rows.length === 0) {
-    throw new Error("INVALID_CREDENTIALS");
+    throw new Error(
+      "INVALID_CREDENTIALS"
+    );
   }
 
   const user = result.rows[0];
 
-  const passwordValid = await bcrypt.compare(
-    password,
-    user.password_hash
-  );
+  const passwordValid =
+    await bcrypt.compare(
+      password,
+      user.password_hash
+    );
 
   if (!passwordValid) {
-    throw new Error("INVALID_CREDENTIALS");
+    throw new Error(
+      "INVALID_CREDENTIALS"
+    );
   }
 
-  const token = generateToken(user);
+  const token =
+    generateToken(user);
 
   const {
     password_hash: _passwordHash,
@@ -141,4 +105,4 @@ export async function loginUser(
     user: safeUser,
     token,
   };
-} 
+}
